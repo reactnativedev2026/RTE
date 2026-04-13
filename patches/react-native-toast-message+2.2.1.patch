@@ -1,0 +1,13 @@
+diff --git a/node_modules/react-native-toast-message/lib/src/components/AnimatedContainer.js b/node_modules/react-native-toast-message/lib/src/components/AnimatedContainer.js
+index 1d469fd..ddd0894 100644
+--- a/node_modules/react-native-toast-message/lib/src/components/AnimatedContainer.js
++++ b/node_modules/react-native-toast-message/lib/src/components/AnimatedContainer.js
+@@ -54,7 +54,7 @@ export function AnimatedContainer({ children, isVisible, position, topOffset, bo
+     }, [animate, log, onHide]);
+     const onRestore = React.useCallback(() => {
+         log('Swipe, restoring to original position');
+-        animate(1);
++        animate(0);
+         onRestorePosition();
+     }, [animate, log, onRestorePosition]);
+     const computeNewAnimatedValueForGesture = React.useCallback((gesture) => {

@@ -1,0 +1,38 @@
+buildscript {
+    ext {
+        buildToolsVersion = "35.0.0"
+        minSdkVersion = 29  // Samsung Health SDK requires API 29+
+        compileSdkVersion = 35
+        targetSdkVersion = 35
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.0.21"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // classpath("com.android.tools.build:gradle")  // Update Gradle plugin
+        classpath("com.android.tools.build:gradle:8.3.2")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+          classpath 'com.google.gms:google-services:4.4.0'
+    }
+}
+
+allprojects {
+    repositories {
+      mavenLocal()
+      jcenter()
+      maven { url "$rootDir/../node_modules/react-native/android" }
+
+      // ADD THIS
+      maven { url 'https://maven.google.com' }
+
+      // ADD THIS
+      maven { url "https://www.jitpack.io" }
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
