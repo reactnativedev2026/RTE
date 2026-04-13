@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "676359334600",
+    "project_id": "runtheedge-698b8",
+    "storage_bucket": "runtheedge-698b8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:676359334600:android:c2e9cc4b87c01c286f13fd",
+        "android_client_info": {
+          "package_name": "com.loginsignupapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjsMalxHXvgqerFAUEwxDVkplay1CLQB8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

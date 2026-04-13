@@ -1,0 +1,133 @@
+name: React Native CI/CD
+
+on:
+  push:
+    branches: development
+
+env:
+  NODE_VERSION: 18
+  JAVA_VERSION: '11'
+  ANDROID_BUILD_TOOLS: '34.0.0'
+  ANDROID_SDK_ROOT: '$HOME/android-sdk'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      node-cache-key: ${{ steps.node-cache.outputs.cache-key }}
+      yarn-cache-key: ${{ steps.yarn-cache.outputs.cache-key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+
+      - name: Get Node cache key
+        id: node-cache
+        run: echo "cache-key=$(node -v)-$(ls -la node_modules | sha256sum | cut -d ' ' -f1)" >> $GITHUB_OUTPUT
+
+      - name: Get Yarn cache key
+        id: yarn-cache
+        run: echo "cache-key=$(yarn -v)-$(sha256sum yarn.lock | cut -d ' ' -f1)" >> $GITHUB_OUTPUT
+
+  test:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Node modules cache
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ needs.setup.outputs.node-cache-key }}
+
+      - name: Restore Yarn cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/yarn
+          key: ${{ needs.setup.outputs.yarn-cache-key }}
+          
+      - name: Override problematic package
+        run: |
+          yarn add react-native-image-crop-picker@0.41.5 --ignore-engines
+          git checkout HEAD -- package.json # Revert version change
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run Jest tests
+        run: yarn test
+
+      - name: Run ESLint
+        run: yarn lint
+
+  android:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build Android Release
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-release
+          path: android/app/build/outputs/apk/release/app-release.apk
+
+  ios:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
+          cd ios && pod install
+
+      - name: Build iOS
+        run: |
+          cd ios
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -archivePath build/App.xcarchive archive
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive -archivePath ios/build/App.xcarchive -exportOptionsPlist ios/ExportOptions.plist -exportPath ios/build
+
+  deploy:
+    needs: [android, ios]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Firebase App Distribution
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          token: ${{ secrets.FIREBASE_TOKEN }}
+          groups: testers
+          file: android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Deploy to TestFlight
+        uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: ios/build/App.ipa
+          issuer-id: ${{ secrets.APPLE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPLE_API_KEY_ID }}
+          api-private-key: ${{ secrets.APPLE_API_PRIVATE_KEY }}
