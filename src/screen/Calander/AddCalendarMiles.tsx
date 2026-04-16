@@ -1,40 +1,40 @@
-import { useRoute } from '@react-navigation/native';
-import { tz } from 'moment-timezone';
+import {useRoute} from '@react-navigation/native';
+import {tz} from 'moment-timezone';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { useDispatch, useSelector } from 'react-redux';
+import {StyleSheet, View} from 'react-native';
+import {useDispatch, useSelector} from 'react-redux';
 import {
   CustomAlert,
   CustomMilesForm,
   CustomScreenWrapper,
 } from '../../components';
-import { RootState } from '../../core/store';
+import {RootState} from '../../core/store';
 import {
   useCreateCalanderEventMutation,
   useLazyGetUserPointDetailQuery,
   useUpdateUserPointsMutation,
 } from '../../services/Calander.api';
-import { goBack, pop } from '../../services/NavigationService';
-import { colors } from '../../utils/colors';
-import { ANDROID, moderateScale } from '../../utils/metrics';
-import { setRefetchYears } from '../AuthScreen/login/login.slice';
+import {goBack, pop} from '../../services/NavigationService';
+import {colors} from '../../utils/colors';
+import {ANDROID, moderateScale} from '../../utils/metrics';
+import {setRefetchYears} from '../AuthScreen/login/login.slice';
 
-interface AddCalendarMilesProps { }
+interface AddCalendarMilesProps {}
 
-const AddCalendarMiles = ({ }: AddCalendarMilesProps) => {
+const AddCalendarMiles = ({}: AddCalendarMilesProps) => {
   const route = useRoute();
   const dispatch = useDispatch();
 
   const [noteDetail, setNoteDetail] = React.useState(null);
   const [pointsDetail, setPointsDetail] = React.useState(null);
-  const { user } = useSelector((state: RootState) => state.loginReducer);
+  const {user} = useSelector((state: RootState) => state.loginReducer);
 
-  const [getPointDetail, { isFetching }] = useLazyGetUserPointDetailQuery();
-  const [createUserPoints, { isLoading }] = useCreateCalanderEventMutation();
-  const [updateUserPoints, { isLoading: updateIsLoading }] =
+  const [getPointDetail, {isFetching}] = useLazyGetUserPointDetailQuery();
+  const [createUserPoints, {isLoading}] = useCreateCalanderEventMutation();
+  const [updateUserPoints, {isLoading: updateIsLoading}] =
     useUpdateUserPointsMutation();
 
-  const createUserpointsAction = async ({ values }) => {
+  const createUserpointsAction = async ({values}) => {
     const pointsToCreate = {
       points: values?.points,
       date: route?.params?.date,
@@ -44,13 +44,13 @@ const AddCalendarMiles = ({ }: AddCalendarMilesProps) => {
     await createUserPoints(pointsToCreate)
       .unwrap()
       .catch(err => {
-        CustomAlert({ type: 'error', message: err?.data?.message });
+        CustomAlert({type: 'error', message: err?.data?.message});
       });
   };
 
-  const updateUserpointsAction = async ({ values }) => {
+  const updateUserpointsAction = async ({values}) => {
     const points = await values?.points.map(i => {
-      return { point_id: i?.id, amount: i?.amount };
+      return {point_id: i?.id, amount: i?.amount};
     });
     const pointsToCreate = {
       points: points,
@@ -61,7 +61,7 @@ const AddCalendarMiles = ({ }: AddCalendarMilesProps) => {
     await updateUserPoints(pointsToCreate)
       .unwrap()
       .catch(err => {
-        CustomAlert({ type: 'error', message: err?.data?.message });
+        CustomAlert({type: 'error', message: err?.data?.message});
       });
   };
 
@@ -75,8 +75,6 @@ const AddCalendarMiles = ({ }: AddCalendarMilesProps) => {
 
   const handlePointDetail = () => {
     if (route?.params?.miles) {
-      console.log(route?.params?.date, 'this is date')
-      console.log(user?.preferred_event_id, 'this is event id')
       getPointDetail({
         event_id: user?.preferred_event_id,
         date: formatDate(route?.params?.date),
@@ -91,7 +89,7 @@ const AddCalendarMiles = ({ }: AddCalendarMilesProps) => {
   };
 
   const SaveAction = async values => {
-    const result = { nullIds: [], validIds: [] };
+    const result = {nullIds: [], validIds: []};
     await values?.points?.forEach(item => {
       if (item.id === null) {
         result.nullIds.push(item);
@@ -102,20 +100,20 @@ const AddCalendarMiles = ({ }: AddCalendarMilesProps) => {
     try {
       if (result.nullIds.length > 0) {
         await createUserpointsAction({
-          values: { ...values, points: result.nullIds },
+          values: {...values, points: result.nullIds},
         });
       }
       if (result.validIds.length > 0) {
         await updateUserpointsAction({
-          values: { ...values, points: result.validIds },
+          values: {...values, points: result.validIds},
         });
       }
-      CustomAlert({ type: 'success', message: 'Updated Successfully!' });
+      CustomAlert({type: 'success', message: 'Updated Successfully!'});
       route?.params?.onPointsAddCallback?.();
       dispatch(setRefetchYears());
       pop(1);
     } catch (err) {
-      CustomAlert({ type: 'error', message: 'Something went wrong!' });
+      CustomAlert({type: 'error', message: 'Something went wrong!'});
     }
   };
 
@@ -131,7 +129,7 @@ const AddCalendarMiles = ({ }: AddCalendarMilesProps) => {
           setNoteDetail={setNoteDetail}
           isLoading={isFetching || isLoading || updateIsLoading}
           eventId={user?.preferred_event_id}
-          footerObj={{ date: route?.params?.date, miles: route?.params?.miles }}
+          footerObj={{date: route?.params?.date, miles: route?.params?.miles}}
         />
       </View>
     </CustomScreenWrapper>

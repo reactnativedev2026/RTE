@@ -14,9 +14,9 @@ import { getStartAndEndDateOfMonth } from '../../utils/helpers';
 import { Routes } from '../../utils/Routes';
 
 const CalanderContainer = () => {
-  const { fetchEventData } = useEventData();
+  const {fetchEventData} = useEventData();
 
-  const { user } = useSelector((state: RootState) => state.loginReducer);
+  const {user} = useSelector((state: RootState) => state.loginReducer);
   const nowInTZ = tz(user?.time_zone_name || 'UTC');
 
   const [current, setCurrent] = useState('');
@@ -34,7 +34,7 @@ const CalanderContainer = () => {
     notes: '',
     logo: '',
     vimeo_id: '',
-    extra: {}
+    extra:{}
   });
 
   useEffect(() => {
@@ -48,9 +48,9 @@ const CalanderContainer = () => {
       notes: '',
       logo: '',
       vimeo_id: '',
-      extra: {}
+       extra:{}
     });
-    const { year, month } = monthInfo[0];
+    const {year, month} = monthInfo[0];
     setCurrentMonth(month);
     setCurrentYear(year);
     const getDate = getStartAndEndDateOfMonth({
@@ -76,9 +76,9 @@ const CalanderContainer = () => {
       notes: '',
       logo: '',
       vimeo_id: '',
-      extra: {}
+      extra:{}
     });
-    const { year, month } = monthInfo[0];
+    const {year, month} = monthInfo[0];
     setCurrentMonth(month);
     setCurrentYear(year);
     const getDate = getStartAndEndDateOfMonth({
@@ -111,7 +111,7 @@ const CalanderContainer = () => {
         vimeo_id:
           matchedItem?.milestone?.data &&
           JSON.parse(matchedItem?.milestone?.data),
-        extra: matchedItem,
+        extra:matchedItem,
       });
     } else {
       setFooterObj({
@@ -120,7 +120,7 @@ const CalanderContainer = () => {
         notes: '',
         logo: '',
         vimeo_id: '',
-        extra: {}
+        extra:{}
       });
     }
   };
@@ -163,22 +163,22 @@ const CalanderContainer = () => {
 
   const [
     getCalendarPoints,
-    { isFetching: getCalendarPointsIsFetching, isLoading },
+    {isFetching: getCalendarPointsIsFetching, isLoading},
   ] = useLazyGetCalendarPointsQuery();
   const handleCalendarListPoints = dateObj => {
     const getPointsObj = {
       start_date: dateObj?.start_date
         ? dateObj?.start_date
         : getStartAndEndDateOfMonth({
-          customMonth: currentMonth,
-          customYear: currentYear,
-        })?.startDate,
+            customMonth: currentMonth,
+            customYear: currentYear,
+          })?.startDate,
       end_date: dateObj?.end_date
         ? dateObj?.end_date
         : getStartAndEndDateOfMonth({
-          customMonth: currentMonth,
-          customYear: currentYear,
-        })?.endDate,
+            customMonth: currentMonth,
+            customYear: currentYear,
+          })?.endDate,
       event_id: user?.preferred_event_id,
       mode: 'list',
       page_limit: 100,
@@ -192,11 +192,11 @@ const CalanderContainer = () => {
       });
   };
   const handleCalendarPoints = dateObj => {
-    const getPointsObj = { ...dateObj, mode: 'calendar' };
+    const getPointsObj = {...dateObj, mode: 'calendar'};
     getCalendarPoints(getPointsObj)
       .unwrap()
       .then(res => {
-        const pointsData = res?.data?.points?.data;
+         const pointsData = res?.data?.points?.data;
         setMonthlyPoints(pointsData);
         const boldDatesArray = pointsData?.map((item: any) => item?.date);
         setBoldDates(boldDatesArray);
@@ -205,21 +205,21 @@ const CalanderContainer = () => {
         }
       })
       .catch(err => {
-        CustomAlert({ type: 'error', message: err?.data?.message });
+        CustomAlert({type: 'error', message: err?.data?.message});
       });
   };
   useEffect(() => {
     if (listView) {
       handleCalendarListPoints();
     } else {
-      onPointsAddCallback({ month: currentMonth, year: currentYear });
+      onPointsAddCallback({month: currentMonth, year: currentYear});
     }
   }, [listView]);
 
   const onPointsAddCallback = ({
     month,
     year,
-  }: { month?: any; year?: any } = {}) => {
+  }: {month?: any; year?: any} = {}) => {
     const profileBody = {
       start_date: getStartAndEndDateOfMonth({
         customMonth: month || currentMonth,

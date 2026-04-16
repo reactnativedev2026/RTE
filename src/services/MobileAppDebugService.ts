@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import {Platform} from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -14,7 +14,7 @@ import {
   HOURLY_RECONCILIATION_ENABLED_KEY,
   RESYNC_SAMSUNG_SYNC_ID_KEY,
 } from './SamsungHealthBackgroundSync';
-import { SamsungHealth } from './SamsungHealthService';
+import {SamsungHealth} from './SamsungHealthService';
 
 /**
  * Interface for the mobile app user debug data payload
@@ -58,7 +58,7 @@ class MobileAppDebugServiceClass {
       return deviceInfo;
     } catch (error: any) {
       console.error('[MobileAppDebugService] Error collecting device info:', error);
-      return { error: error?.message || 'Failed to collect device info' };
+      return {error: error?.message || 'Failed to collect device info'};
     }
   }
 
@@ -81,7 +81,7 @@ class MobileAppDebugServiceClass {
         const allowedDataTypes = syncDebugInfo?.serviceState?.allowedDataTypes || ['STEPS', 'EXERCISE'];
         permissionsInfo = await SamsungHealth.checkGrantedPermissions(allowedDataTypes);
       } catch (permError: any) {
-        permissionsInfo = { error: permError?.message || 'Failed to check permissions' };
+        permissionsInfo = {error: permError?.message || 'Failed to check permissions'};
       }
 
       return {
@@ -90,7 +90,7 @@ class MobileAppDebugServiceClass {
       };
     } catch (error: any) {
       console.error('[MobileAppDebugService] Error collecting Samsung Health data:', error);
-      return { error: error?.message || 'Failed to collect Samsung Health data' };
+      return {error: error?.message || 'Failed to collect Samsung Health data'};
     }
   }
 
@@ -153,7 +153,7 @@ class MobileAppDebugServiceClass {
       return storageData;
     } catch (error: any) {
       console.error('[MobileAppDebugService] Error collecting storage data:', error);
-      return { error: error?.message || 'Failed to collect storage data' };
+      return {error: error?.message || 'Failed to collect storage data'};
     }
   }
 

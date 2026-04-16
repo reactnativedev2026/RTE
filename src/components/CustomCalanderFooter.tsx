@@ -66,7 +66,7 @@ const CustomCalanderFooter = ({
 
   const isDateSelected = startDate || footerObj?.date;
 
-  const renderItem = ({ item, index }: { item: any; index: any }) => {
+  const renderItem = ({item, index}: {item: any; index: any}) => {
     const isEven = index % 2 === 0;
 
     return (
@@ -109,7 +109,7 @@ const CustomCalanderFooter = ({
             <View
               style={[
                 styles.secondRow,
-                hideEdit && { flexDirection: 'row-reverse' },
+                hideEdit && {flexDirection: 'row-reverse'},
               ]}>
               <View>
                 <Text
@@ -165,44 +165,44 @@ const CustomCalanderFooter = ({
           <View style={styles.imageContainer}>
             {(footerObj?.logo ||
               footerObj?.milestone?.image?.logo_image_url) && (
-                <TouchableOpacity onPress={() => setModalVisible(true)}>
-                  <FastImage
-                    source={{
-                      uri:
-                        footerObj?.logo ||
-                        footerObj?.milestone?.image?.logo_image_url,
-                    }}
-                    style={[styles.image, customImage]}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity onPress={() => setModalVisible(true)}>
+                <FastImage
+                  source={{
+                    uri:
+                      footerObj?.logo ||
+                      footerObj?.milestone?.image?.logo_image_url,
+                  }}
+                  style={[styles.image, customImage]}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}
 
       {footerObj?.vimeo_id?.flyover_url && (
-        <View style={{ alignSelf: 'center', flexDirection: 'row' }}>
+        <View style={{alignSelf: 'center', flexDirection: 'row'}}>
           <TouchableOpacity
             onPress={() => {
               setVideoModalVisible(true);
             }}>
             <Text style={styles.videoLinks}>Click Here</Text>
           </TouchableOpacity>
-          <Text style={{ color: colors.black }}>{' to see the video'}</Text>
+          <Text style={{color: colors.black}}>{' to see the video'}</Text>
         </View>
       )}
 
       {footerObj?.extra?.bibs_url && (
         <View
-          style={{ alignSelf: 'center', flexDirection: 'row', marginTop: 14 }}>
+          style={{alignSelf: 'center', flexDirection: 'row', marginTop: 14}}>
           <TouchableOpacity
             onPress={() => {
               Linking.openURL(footerObj?.extra?.bibs_url);
             }}>
             <Text style={styles.videoLinks}>Click here</Text>
           </TouchableOpacity>
-          <Text style={{ color: colors.black }}>{' to make a custom bib!'}</Text>
+          <Text style={{color: colors.black}}>{' to make a custom bib!'}</Text>
         </View>
       )}
 
@@ -221,7 +221,7 @@ const CustomCalanderFooter = ({
           modalVisible={modalVisible}
           setModalVisible={setModalVisible}
           imageUri={
-            footerObj?.extra?.milestone?.image?.logo_image_url ?? footerObj?.milestone?.image?.logo_image_url ?? footerObj?.logo
+            footerObj?.extra?.milestone?.image?.logo_image_url ??  footerObj?.milestone?.image?.logo_image_url ?? footerObj?.logo 
           }
           obj={footerObj}
         />
@@ -251,13 +251,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  miles: { fontWeight: 'bold', width: moderateScale(90) },
+  miles: {fontWeight: 'bold', width: moderateScale(90)},
   editContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: moderateScale(3),
   },
-  editIcon: { color: colors.primaryGrey, marginRight: moderateScale(5) },
+  editIcon: {color: colors.primaryGrey, marginRight: moderateScale(5)},
   notesContainer: {
     marginTop: moderateScale(10),
     flex: 1,
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     objectFit: 'contain',
   },
-  noteText: { fontWeight: '400' },
+  noteText: {fontWeight: '400'},
   videoLinks: {
     fontSize: 13,
     textDecorationLine: 'underline',
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     textDecorationColor: colors.blue,
   },
 
-  lineStyling: { borderColor: colors.lightGrey, marginTop: moderateScale(-1) },
+  lineStyling: {borderColor: colors.lightGrey, marginTop: moderateScale(-1)},
   itemStyling: isEven => ({
     width: '100%',
     backgroundColor: !isEven && colors.white,

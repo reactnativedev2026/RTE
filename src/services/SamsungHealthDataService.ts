@@ -467,7 +467,6 @@ class SamsungHealthDataService {
 
         // Create payload for all dates to ensure we store the calculation even if result is 0
         const threshold = 0.000001; // Small threshold to handle floating point precision
-        
         // Ensure amount is never negative
         const finalAmount = Math.max(0, dailyStepsMiles);
           

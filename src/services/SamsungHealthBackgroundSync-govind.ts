@@ -27,6 +27,8 @@ const HOURLY_RECONCILIATION_ENABLED_KEY =
   '@samsung_health_hourly_reconciliation_enabled';
 const RESYNC_SAMSUNG_SYNC_ID_KEY = '@samsung_health_resync_sync_id';
 
+import { MobileAppDebugService } from './MobileAppDebugService';
+
 // Daily data sync payload interface - comprehensive data for the day
 export interface DailyDataSyncPayload {
   date: string; // YYYY-MM-DD
@@ -85,6 +87,18 @@ export interface LastSyncDateResponse {
   message: string;
 }
 
+// Result of a single date sync operation
+export interface SyncDataForDateResult {
+  success: boolean;
+  date: string;
+  data_found: {
+    steps: number;
+    distance_miles: number;
+    exercise_count: number;
+  };
+  error?: string;
+}
+
 export interface BackgroundSyncConfig {
   eventId: number;
   onSyncComplete?: (success: boolean, message: string) => void;
@@ -104,7 +118,9 @@ class SamsungHealthBackgroundSyncService {
     null;
   private updateLastCronApiFunction: ((payload: any) => Promise<any>) | null =
     null;
-  private pushMobileAppUserDataApiFunction: ((payload: any) => Promise<any>) | null =
+  private getDataByDateApiFunction: ((payload: any) => Promise<any>) | null =
+    null;
+  private pushMobileAppUserDataFunction: ((payload: any) => Promise<any>) | null =
     null;
   private isSyncing: boolean = false;
   private appStateSubscription: any = null;
@@ -144,7 +160,8 @@ class SamsungHealthBackgroundSyncService {
     syncApiFunction: (payload: any) => Promise<any>,
     dailyDataSyncApiFunction?: (payload: any) => Promise<any>,
     updateLastCronApiFunction?: (payload: any) => Promise<any>,
-    pushMobileAppUserDataApiFunction?: (payload: any) => Promise<any>,
+    getDataByDateApiFunction?: (payload: any) => Promise<any>,
+    pushMobileAppUserDataFunction?: (payload: any) => Promise<any>,
   ): Promise<void> {
     // If already initialized, just update config and allowed data types
     if (this.isInitialized || this.isInitializing) {
@@ -157,8 +174,11 @@ class SamsungHealthBackgroundSyncService {
         if (updateLastCronApiFunction) {
           this.updateLastCronApiFunction = updateLastCronApiFunction;
         }
-        if (pushMobileAppUserDataApiFunction) {
-          this.pushMobileAppUserDataApiFunction = pushMobileAppUserDataApiFunction;
+        if (getDataByDateApiFunction) {
+          this.getDataByDateApiFunction = getDataByDateApiFunction;
+        }
+        if (pushMobileAppUserDataFunction) {
+          this.pushMobileAppUserDataFunction = pushMobileAppUserDataFunction;
         }
         // Update allowed data types if provided
         if (config.allowedDataTypes) {
@@ -197,8 +217,11 @@ class SamsungHealthBackgroundSyncService {
     if (updateLastCronApiFunction) {
       this.updateLastCronApiFunction = updateLastCronApiFunction;
     }
-    if (pushMobileAppUserDataApiFunction) {
-      this.pushMobileAppUserDataApiFunction = pushMobileAppUserDataApiFunction;
+    if (getDataByDateApiFunction) {
+      this.getDataByDateApiFunction = getDataByDateApiFunction;
+    }
+    if (pushMobileAppUserDataFunction) {
+      this.pushMobileAppUserDataFunction = pushMobileAppUserDataFunction;
     }
 
     // Load configuration from AsyncStorage
@@ -350,7 +373,7 @@ class SamsungHealthBackgroundSyncService {
     this.syncApiFunction = null;
     this.dailyDataSyncApiFunction = null;
     this.updateLastCronApiFunction = null;
-    this.pushMobileAppUserDataApiFunction = null;
+    this.pushMobileAppUserDataFunction = null;
     this.allowedDataTypes = [];
 
     // Reset flags
@@ -1951,10 +1974,20 @@ class SamsungHealthBackgroundSyncService {
   private async syncDataForDate(
     targetDate: string,
     updatePoints: boolean = false,
-  ): Promise<boolean> {
+  ): Promise<SyncDataForDateResult> {
     console.log('[SamsungHealthSync] Syncing data for date:', targetDate, {
       updatePoints,
     });
+
+    const result: SyncDataForDateResult = {
+      success: false,
+      date: targetDate,
+      data_found: {
+        steps: 0,
+        distance_miles: 0,
+        exercise_count: 0,
+      },
+    };
 
     try {
       // Calculate date range for the target day
@@ -2012,14 +2045,12 @@ class SamsungHealthBackgroundSyncService {
             stepsData = fallbackResults[0] || [];
             activitySummaryData = fallbackResults[1] || [];
           } catch (fallbackError) {
-            console.error(
-              `[SamsungHealthSync] Fallback fetch also failed for ${targetDate}:`,
-              fallbackError,
-            );
-            return false;
+            result.error = fallbackError?.message || 'Fallback fetch failed';
+            return result;
           }
         } else {
-          return false;
+          result.error = fetchError?.message || 'Fetch failed';
+          return result;
         }
       }
 
@@ -2122,12 +2153,16 @@ class SamsungHealthBackgroundSyncService {
         },
       };
 
-      console.log(`[SamsungHealthSync] Payload prepared for ${targetDate}:`, {
-        stepsCount: payload.data.steps.length,
-        activitySummaryCount: payload.data.activity_summary.length,
-        exercisesCount: payload.data.exercises.length,
-        summary: payload.summary,
-      });
+      //   exercisesCount: payload.data.exercises.length,
+      //   summary: payload.summary,
+      // });
+
+      // Update result with data found
+      result.data_found = {
+        steps: payload.summary.total_steps,
+        distance_miles: payload.summary.total_distance_miles,
+        exercise_count: payload.summary.exercise_count,
+      };
 
       // Post to samsung-health/daily-data-sync API (logs)
       // const result = await this.dailyDataSyncApiFunction!(payload);
@@ -2136,17 +2171,17 @@ class SamsungHealthBackgroundSyncService {
       //   result,
       // );
 
-      let result;
+      let apiResult;
       let isSuccess = true;
       try {
-        result = await this.retryApiCall(
+        apiResult = await this.retryApiCall(
           () => this.dailyDataSyncApiFunction!(payload),
           1, // 1 retry
         );
 
         console.log(
           `[SamsungHealthSync] Data synced successfully for ${targetDate}:`,
-          result,
+          apiResult,
         );
       } catch (error) {
         isSuccess = false;
@@ -2222,10 +2257,29 @@ class SamsungHealthBackgroundSyncService {
           }
 
           // Merge payloads by date
-          const mergedPayloads = this.mergePayloadsByDate(
+          let mergedPayloads = this.mergePayloadsByDate(
             exercisePayloads,
             dailyStepsPayloads,
           );
+
+          // If no payloads were generated (0 data for the day), create a fallback zero payload
+          // This ensures that "0 miles" is registered on the server
+          if (mergedPayloads.length === 0) {
+            console.log(
+              `[SamsungHealthSync] No activity for ${targetDate}, creating fallback zero points payload`,
+            );
+            mergedPayloads = [{
+              points: [{
+                modality: 'daily_steps',
+                data_source_id: 7,
+                amount: "0.000000"
+              }],
+              date: targetDate,
+              event_id: this.config.eventId,
+              transaction_id: `daily_steps_zero`,
+              note: 'Auto-sync: No movement detected'
+            }];
+          }
 
           console.log(
             `[SamsungHealthSync] Points payloads prepared for ${targetDate}:`,
@@ -2263,13 +2317,50 @@ class SamsungHealthBackgroundSyncService {
         }
       }
 
-      return true;
+      result.success = true;
+      return result;
     } catch (error: any) {
       console.error(
         `[SamsungHealthSync] Error syncing data for ${targetDate}:`,
         error,
       );
-      return false;
+      result.error = error?.message || 'Sync failed';
+
+      // Send fallback 0 payload with descriptive error in transaction ID as requested
+      if (updatePoints && this.syncApiFunction && this.config) {
+        try {
+
+          const fallbackPayload: SyncExercisePayload = {
+            points: [
+              {
+                modality: 'daily_steps',
+                data_source_id: 7,
+                amount: '0.000000',
+              },
+            ],
+            date: targetDate,
+            event_id: this.config.eventId,
+            transaction_id: `${result.error}`,
+            note: `Auto-fallback due to error: ${result.error.substring(0, 100)}`,
+          };
+
+          console.log(
+            `[SamsungHealthSync] Sending error fallback points for ${targetDate} (error: ${errorCode})...`,
+          );
+
+          await this.retryApiCall(
+            () => this.syncApiFunction!(fallbackPayload),
+            1,
+          );
+        } catch (fallbackError) {
+          console.error(
+            `[SamsungHealthSync] Error fallback points also failed for ${targetDate}`,
+            fallbackError,
+          );
+        }
+      }
+
+      return result;
     }
   }
 
@@ -2342,8 +2433,8 @@ class SamsungHealthBackgroundSyncService {
     let failCount = 0;
 
     for (const date of datesToSync) {
-      const success = await this.syncDataForDate(date, true);
-      if (success) {
+      const syncResult = await this.syncDataForDate(date, true);
+      if (syncResult.success) {
         successCount++;
       } else {
         failCount++;
@@ -2443,29 +2534,13 @@ class SamsungHealthBackgroundSyncService {
       let failCount = 0;
 
       for (const date of datesToSync) {
-        const success = await this.syncDataForDate(
+        const syncResult = await this.syncDataForDate(
           date,
           updatePointsDuringResync,
         );
-        if (success) {
+        if (syncResult.success) {
           successCount++;
-          // Update last processed cron date after each successful day sync
-          if (this.updateLastCronApiFunction) {
-            try {
-              await this.updateLastCronApiFunction({
-                data_source_id: 7,
-                cron_start_date: date,
-              });
-              console.log(
-                `[SamsungHealthSync] Last cron date updated for ${date}`,
-              );
-            } catch (cronError: any) {
-              console.error(
-                `[SamsungHealthSync] Failed to update last cron date for ${date}:`,
-                cronError,
-              );
-            }
-          }
+          // Removed: Update last processed cron date should only happen in foreground cron job
         } else {
           failCount++;
         }
@@ -2649,6 +2724,8 @@ class SamsungHealthBackgroundSyncService {
       days_to_process,
     });
 
+    const cronResults: SyncDataForDateResult[] = [];
+
     try {
       await SamsungHealth.initialize();
     } catch (error: any) {
@@ -2667,6 +2744,24 @@ class SamsungHealthBackgroundSyncService {
       console.log(
         `[SamsungHealthSync] Foreground job: cron_start_date ${cron_start_date} is yesterday or future, data is already up to date`,
       );
+
+      // Still send summary even if nothing to process
+      if (this.pushMobileAppUserDataFunction) {
+        try {
+          const summary = {
+            type: '5_day_cron_summary',
+            event_id: this.config.eventId,
+            cron_start_date: cron_start_date,
+            days_processed: 0,
+            message: 'All data already up to date',
+            results: [],
+          };
+          const summaryPayload = await MobileAppDebugService.wrapCronSummary(summary);
+          await this.pushMobileAppUserDataFunction(summaryPayload);
+          console.log('[SamsungHealthSync] 5-day cron skip summary sent to debug API');
+        } catch (e) { /* ignore */ }
+      }
+
       return;
     }
 
@@ -2687,19 +2782,15 @@ class SamsungHealthBackgroundSyncService {
       },
     );
 
-    console.log('[SamsungHealthSync] Foreground job: completed', {
-      startDate: cron_start_date,
-      daysProcessed: effectiveDaysToProcess,
-    });
-
     let currentDate = cron_start_date;
-    const syncResults: any[] = [];
-    let successCount = 0;
-    let failCount = 0;
 
     for (let i = 0; i < effectiveDaysToProcess; i++) {
       // Hard boundary enforced at every iteration — never process yesterday or beyond.
+      // This is the single source of truth regardless of how effectiveDaysToProcess was computed.
       if (currentDate > yesterdayDate) {
+        console.log(
+          `[SamsungHealthSync] Foreground job: ${currentDate} is today or future, stopping — no further processing or cron updates`,
+        );
         break;
       }
 
@@ -2708,11 +2799,77 @@ class SamsungHealthBackgroundSyncService {
         }/${effectiveDaysToProcess}: ${currentDate}`,
       );
 
-      const success = await this.syncDataForDate(currentDate, true);
+      const syncResult = await this.syncDataForDate(currentDate, true);
+      cronResults.push(syncResult);
 
-      if (success) {
-        successCount++;
-        syncResults.push({ date: currentDate, status: 'success' });
+      if (syncResult.success) {
+        // Verification check: Fetch data for the same date from server and compare
+        if (this.getDataByDateApiFunction && this.config) {
+          try {
+            console.log(
+              `[SamsungHealthSync] Foreground job: Verifying data for ${currentDate}...`,
+            );
+            const serverDataResult = await this.getDataByDateApiFunction({
+              event_id: this.config.eventId,
+              date: currentDate,
+            });
+
+            if (serverDataResult?.success && serverDataResult?.data) {
+              const serverPoints = serverDataResult.data.points || [];
+
+              // Filter points to ONLY include Samsung Health (source_id 7)
+              const samsungServerPoints = serverPoints.filter((p: any) => p.data_source_id === 7);
+
+              const serverTotalMiles = samsungServerPoints.reduce(
+                (sum: number, p: any) => sum + (parseFloat(p.amount) || 0),
+                0
+              );
+
+              // Gather modalities for logging
+              const serverModalities = samsungServerPoints.map((p: any) => `${p.modality}: ${p.amount}`).join(', ');
+
+              // Calculate current Samsung state
+              const targetDay = new Date(currentDate + 'T00:00:00');
+              const nextDay = new Date(targetDay);
+              nextDay.setDate(nextDay.getDate() + 1);
+              const startDateStr = `${currentDate}T00:00:00`;
+              const endDateStr = `${this.formatDateString(nextDay)}T00:00:00`;
+
+              const activitySummaryData = await SamsungHealth.getActivitySummaryDistance(startDateStr, endDateStr);
+              const samsungTotalDistanceKm = (activitySummaryData || []).reduce((sum, a) => sum + a.distanceKilometers, 0);
+              const samsungTotalDistanceMiles = samsungTotalDistanceKm * 0.621371192;
+
+              console.log(`[SamsungHealthSync] Foreground Verification [${currentDate}]:`, {
+                serverSource7: {
+                  total_miles: serverTotalMiles,
+                  details: serverModalities || 'No Samsung points found',
+                },
+                localSamsung: {
+                  total_miles: parseFloat(samsungTotalDistanceMiles.toFixed(6)),
+                  total_km: parseFloat(samsungTotalDistanceKm.toFixed(6)),
+                },
+              });
+
+              // Compare total miles with a small threshold for floating point differences
+              const isMismatch = Math.abs(serverTotalMiles - samsungTotalDistanceMiles) > 0.01;
+
+              if (isMismatch) {
+                console.log(
+                  `[SamsungHealthSync] Foreground mismatch for ${currentDate}! Server: ${serverTotalMiles.toFixed(4)}, Local: ${samsungTotalDistanceMiles.toFixed(4)}. Re-uploading...`,
+                );
+                await this.syncDataForDate(currentDate, true);
+              } else {
+                console.log(`[SamsungHealthSync] Foreground match for ${currentDate}. Data is consistent.`);
+              }
+            }
+          } catch (verifyError: any) {
+            console.error(
+              `[SamsungHealthSync] Foreground job: Verification failed for ${currentDate}:`,
+              verifyError,
+            );
+          }
+        }
+
         if (this.updateLastCronApiFunction) {
           try {
             await this.updateLastCronApiFunction({
@@ -2730,8 +2887,6 @@ class SamsungHealthBackgroundSyncService {
           }
         }
       } else {
-        failCount++;
-        syncResults.push({ date: currentDate, status: 'failure' });
         console.error(
           `[SamsungHealthSync] Foreground job: failed to sync data for ${currentDate}, stopping batch`,
         );
@@ -2747,31 +2902,31 @@ class SamsungHealthBackgroundSyncService {
       await new Promise(res => setTimeout(res, 400));
     }
 
-    const finalReport = {
-      type: 'foreground_cron_job_report',
-      cron_start_date: cron_start_date,
-      days_to_process: days_to_process,
-      effective_days: effectiveDaysToProcess,
-      results: syncResults,
-      summary: {
-        total: syncResults.length,
-        successful: successCount,
-        failed: failCount,
-      },
-      final_cron_date: currentDate > cron_start_date ? currentDate : cron_start_date,
-      timestamp: new Date().toISOString()
-    };
-
-    console.log('[SamsungHealthSync] Foreground job completed. Sending report:', finalReport);
-
-    if (this.pushMobileAppUserDataApiFunction) {
+    // Send summary report to debug API
+    if (this.pushMobileAppUserDataFunction) {
       try {
-        await this.pushMobileAppUserDataApiFunction(finalReport);
-        console.log('[SamsungHealthSync] Foreground job report sent successfully');
-      } catch (reportError) {
-        console.error('[SamsungHealthSync] Failed to send foreground job report:', reportError);
+        const summary = {
+          type: '5_day_cron_summary',
+          event_id: this.config.eventId,
+          cron_start_date: cron_start_date,
+          days_processed: cronResults.length,
+          results: cronResults,
+        };
+
+        const summaryPayload = await MobileAppDebugService.wrapCronSummary(summary);
+
+        await this.pushMobileAppUserDataFunction(summaryPayload);
+        console.log('[SamsungHealthSync] 5-day cron summary sent to debug API with device info');
+      } catch (debugError: any) {
+        console.error('[SamsungHealthSync] Failed to send cron summary to debug API:', debugError);
       }
     }
+
+    console.log('[SamsungHealthSync] Foreground job: completed', {
+      startDate: cron_start_date,
+      daysProcessed: effectiveDaysToProcess,
+      actualProcessed: cronResults.length,
+    });
   }
 
   /**
@@ -2993,7 +3148,8 @@ class SamsungHealthBackgroundSyncService {
       console.log(
         `[SamsungHealthSync] Hourly reconciliation - Syncing previous day: ${previousDayDate}`,
       );
-      yesterdaySuccess = await this.syncDataForDate(previousDayDate, true); // Update points for previous day
+      const yesterdayResult = await this.syncDataForDate(previousDayDate, true); // Update points for previous day
+      yesterdaySuccess = yesterdayResult.success;
 
       if (yesterdaySuccess) {
         console.log(
@@ -3009,7 +3165,8 @@ class SamsungHealthBackgroundSyncService {
       console.log(
         `[SamsungHealthSync] Hourly reconciliation - Syncing today: ${todayDate}`,
       );
-      todaySuccess = await this.syncDataForDate(todayDate, true); // Update points for today
+      const todayResult = await this.syncDataForDate(todayDate, true); // Update points for today
+      todaySuccess = todayResult.success;
 
       if (todaySuccess) {
         console.log(
