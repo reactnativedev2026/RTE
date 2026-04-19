@@ -1,11 +1,11 @@
 import React from 'react';
-import { View } from 'react-native';
-import { colors } from '../utils/colors';
-import { images } from '../utils';
-import { getTemplateSpecs } from '../utils/helpers';
-import { store } from '../core/store';
+import {View} from 'react-native';
+import {colors} from '../utils/colors';
+import {images} from '../utils';
+import {getTemplateSpecs} from '../utils/helpers';
+import {store} from '../core/store';
 
-const CustomTabBarButton = ({ name, focused }) => {
+const CustomTabBarButton = ({name, focused}) => {
   let Icon = images[name || 'Menu'];
   return (
     <View
@@ -22,8 +22,8 @@ const CustomTabBarButton = ({ name, focused }) => {
         fill={
           focused
             ? getTemplateSpecs(
-              store.getState().loginReducer.eventDetail?.template,
-            )?.bottomTabIconColor
+                store.getState().loginReducer.eventDetail?.template,
+              )?.bottomTabIconColor
             : colors.lightGrey
         }
       />

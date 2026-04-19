@@ -8,6 +8,9 @@ import {settingApi} from './setting.api';
 import {questApi} from './quest.api';
 import {deviceConnectApi} from './deviceConnect.api';
 import {statsApi} from './stats.api';
+import {deviceTokenApi} from './deviceToken.api';
+import {monthlyGoalApi} from './monthlyGoal.api';
+import {notificationsApi} from './notifications.api';
 
 export {
   loginApi,
@@ -20,4 +23,7 @@ export {
   questApi,
   deviceConnectApi,
   statsApi,
+  deviceTokenApi,
+  monthlyGoalApi,
+  notificationsApi,
 };

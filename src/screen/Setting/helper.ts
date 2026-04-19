@@ -10,6 +10,12 @@ const notificationKeys = {
   TEAM_BIBS: 'team_bibs',
   TEAM_FOLLOW_REQUESTS: 'team_follow_requests',
   TEAM_UPDATES: 'team_updates',
+  MONTHLY_GOAL_ALERTS: 'monthly_goal_alerts',
+  BEHIND_PACE: 'behind_pace',
+  AHEAD_OF_PACE: 'ahead_of_pace',
+  HALFWAY_MILESTONE: 'halfway_milestone',
+  GOAL_COMPLETED: 'goal_completed',
+  MONTHLY_REMINDER: 'monthly_reminder',
 };
 const appUrls = {
   PRIVACY_POLICY: 'https://runtheedge.com/policies/privacy-policy',

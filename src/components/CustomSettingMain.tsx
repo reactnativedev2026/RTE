@@ -3,7 +3,9 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState, store } from '../core/store';
 import useCustomHomeWrapper from '../hooks/useCustomHomeWrapper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setResetLogin } from '../screen/AuthScreen/login/login.slice';
+import { deviceTokenApi } from '../services/deviceToken.api';
 import { appUrls } from '../screen/Setting/helper';
 import { navigate } from '../services/NavigationService';
 import { images } from '../utils';
@@ -36,7 +38,20 @@ const CustomSettingMain = ({}: CustomSettingMainProps) => {
   const isAmerithoneTemplate = Boolean(
     eventDetail?.template == templateName?.AMERITHON,
   );
-  const Logout = () => {
+  const Logout = async () => {
+    try {
+      const fcmToken = await AsyncStorage.getItem('fcmToken');
+      if (fcmToken) {
+        await store
+          .dispatch(
+            deviceTokenApi.endpoints.deactivateDeviceToken.initiate(fcmToken),
+          )
+          .unwrap();
+        console.log('🗑️ Device token deactivated on backend');
+      }
+    } catch (err) {
+      console.log('deactivateDeviceToken error:', err?.data?.message || err);
+    }
     store.dispatch(setResetLogin());
     setShowLogout(false);
   };

@@ -6,6 +6,7 @@ export const Routes = {
   HOME: 'HOME',
   CALANDER: 'Calander',
   ADD_CALENDAR_MILES: 'AddCalendarMiles',
+  MONTHLY_GOAL: 'MonthlyGoal',
   TEAMS: 'Teams',
   SETTING: 'Setting',
   PROFILE: 'Profile',

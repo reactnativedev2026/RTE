@@ -7,10 +7,13 @@ import {
   CalanderApi,
   forgotApi,
   HomeFullfilmentApi,
+  monthlyGoalApi,
+  notificationsApi,
   statsApi,
   loginApi,
   questApi,
   deviceConnectApi,
+  deviceTokenApi,
 } from '../services';
 import {profileApi} from '../services/profile.api';
 import {TeamsApi} from '../services/teams.api';
@@ -48,6 +51,9 @@ export const store = configureStore({
       settingApi.middleware,
       statsApi.middleware,
       questApi.middleware,
+      deviceTokenApi.middleware,
+      monthlyGoalApi.middleware,
+      notificationsApi.middleware,
     ]),
   devTools: process.env.NODE_ENV !== 'production',
   enhancers: getDefaultEnhancers =>

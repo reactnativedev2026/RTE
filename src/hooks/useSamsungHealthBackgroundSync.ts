@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '../core/store';
-import { SamsungHealthBackgroundSync } from '../services/SamsungHealthBackgroundSync';
+import {useEffect} from 'react';
+import {useSelector} from 'react-redux';
+import {RootState} from '../core/store';
+import {SamsungHealthBackgroundSync} from '../services/SamsungHealthBackgroundSync';
 import {
   useSyncSamsungExerciseDataMutation,
   useSyncSamsungDailyDataMutation,
@@ -10,22 +10,22 @@ import {
   usePushMobileAppUserDataMutation,
 } from '../services/deviceConnect.api';
 import { useLazyGetUserPointDetailQuery } from '../services/Calander.api';
-import { Platform } from 'react-native';
+import {Platform} from 'react-native';
 
 /**
  * Hook to initialize Samsung Health background sync on app start
  * This ensures the background sync service continues running even after app restart
  */
 export const useSamsungHealthBackgroundSync = () => {
-  const { user } = useSelector((state: RootState) => state.loginReducer);
+  const {user} = useSelector((state: RootState) => state.loginReducer);
   const [syncExerciseData] = useSyncSamsungExerciseDataMutation();
   const [syncDailyData] = useSyncSamsungDailyDataMutation();
   const [updateLastCron] = useUpdateSamsungHealthLastCronMutation();
   const [pushMobileAppUserData] = usePushMobileAppUserDataMutation();
   const [getDataByDate] = useLazyGetUserPointDetailQuery();
-  const { data: uatAuthData } = useCheckUatAuthorizationQuery(
+  const {data: uatAuthData} = useCheckUatAuthorizationQuery(
     {},
-    { refetchOnMountOrArgChange: true },
+    {refetchOnMountOrArgChange: true},
   );
 
   useEffect(() => {
@@ -60,8 +60,8 @@ export const useSamsungHealthBackgroundSync = () => {
             allowedDataTypes: allowedDataTypes,
             resyncSamsungFrom: resyncSamsungFrom,
             resyncSamsungSyncId: resyncSamsungSyncId,
-            onSyncComplete: (success, message) => { },
-            onSyncStart: () => { },
+            onSyncComplete: (success, message) => {},
+            onSyncStart: () => {},
           },
           async (payload) => {
             return syncExerciseData(payload).unwrap();

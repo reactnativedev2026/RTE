@@ -4,9 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { store } from '../core/store';
+import { navigate } from '../services/NavigationService';
 import { colors, images } from '../utils';
 import { getTemplateSpecs } from '../utils/helpers';
 import { moderateScale } from '../utils/metrics';
+import { Routes } from '../utils/Routes';
 import CustomCalanderFooter from './CustomCalanderFooter';
 import CustomCalendar from './CustomCalendar';
 import CustomCalendarListView from './CustomCalendarListView';
@@ -32,6 +34,7 @@ interface CustomCalendarWrapperProps {
   setShowModal?: () => void;
   showModal?: boolean;
   handleCalendarPoints?: () => void;
+  currentMonthGoal?: number | null;
 }
 const CustomCalendarWrapper = ({
   onPressEdit,
@@ -54,6 +57,7 @@ const CustomCalendarWrapper = ({
   setShowModal,
   showModal,
   handleCalendarPoints,
+  currentMonthGoal,
 }: CustomCalendarWrapperProps) => {
   const primaryColor = getTemplateSpecs(
     store.getState().loginReducer.eventDetail?.template,
@@ -112,11 +116,37 @@ const CustomCalendarWrapper = ({
               />
             </Pressable>
           </View>
-          {formattedDate === currentFormattedDate && (
-            <Pressable onPress={onTodayPress} hitSlop={styles.hitSlop}>
-              <Text style={styles.goToday}>Current Month</Text>
+          <View style={styles.rightActions}>
+            {/* {formattedDate === currentFormattedDate && (
+              <Pressable onPress={onTodayPress} hitSlop={styles.hitSlop}>
+                <Text style={styles.goToday}>Current Month</Text>
+              </Pressable>
+            )} */}
+            <Pressable
+              onPress={() => navigate(Routes.MONTHLY_GOAL)}
+              hitSlop={styles.hitSlop}
+              style={styles.monthlyGoalBtn}>
+              <MaterialCommunityIcons
+                name="flag-outline"
+                size={moderateScale(13)}
+                color={primaryColor}
+              />
+              {currentMonthGoal != null ? (
+                <View style={styles.monthlyGoalTwoLine}>
+                  <Text style={[styles.monthlyGoalText, {color: primaryColor, fontSize: moderateScale(10)}]}>
+                    Monthly Goal
+                  </Text>
+                  <Text style={[styles.monthlyGoalText, {color: primaryColor, fontSize: moderateScale(14)}]}>
+                    {currentMonthGoal} mi
+                  </Text>
+                </View>
+              ) : (
+                <Text style={[styles.monthlyGoalText, {color: primaryColor}]}>
+                  Set Monthly Goal
+                </Text>
+              )}
             </Pressable>
-          )}
+          </View>
         </View>
 
         {listView ? (
@@ -193,6 +223,24 @@ const styles = StyleSheet.create({
   hitSlop: {top: 10, bottom: 10, right: 10, left: 10},
   goToday: {
     color: colors.lightGrey,
+    fontSize: moderateScale(12),
+    fontWeight: '700',
+    marginBottom: moderateScale(4),
+  },
+  rightActions: {
+    alignItems: 'flex-end',
+    gap: moderateScale(2),
+  },
+  monthlyGoalBtn: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: moderateScale(3),
+  },
+  monthlyGoalTwoLine: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
+  monthlyGoalText: {
     fontSize: moderateScale(12),
     fontWeight: '700',
   },

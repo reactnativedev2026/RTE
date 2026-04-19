@@ -3,7 +3,7 @@ import SplashScreen from 'react-native-splash-screen';
 import { store } from '../core/store';
 import { setBaseUrl } from './slice/Base.slice';
 
-const FallBackUrl = 'https://rte-api-v1.runtheedge.com/public/api';
+const FallBackUrl = 'https://rte-api-staging.w3creatives.com/rte-api/public/api';
 
 export const FetchBaseUrl = async () => {
   try {
@@ -12,7 +12,7 @@ export const FetchBaseUrl = async () => {
     );
     const data = await response.json();
 
-    const baseUrl = data?.endpoint?.app_url || FallBackUrl;
+    const baseUrl = FallBackUrl;
     console.log('🚀 ~ FetchBaseUrl ~ baseUrl:', baseUrl);
     store.dispatch(setBaseUrl(baseUrl));
     SplashScreen.hide();

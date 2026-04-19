@@ -9,6 +9,7 @@ import {
 import { RootState } from '../../core/store';
 import { useEventData } from '../../hooks';
 import { useLazyGetCalendarPointsQuery } from '../../services/Calander.api';
+import { useGetYearlyMonthlyGoalQuery } from '../../services/monthlyGoal.api';
 import { navigate } from '../../services/NavigationService';
 import { getStartAndEndDateOfMonth } from '../../utils/helpers';
 import { Routes } from '../../utils/Routes';
@@ -159,6 +160,15 @@ const CalanderContainer = () => {
     }
   };
 
+  const {data: yearlyGoalData} = useGetYearlyMonthlyGoalQuery(
+    {event_id: user?.preferred_event_id, year: String(currentYear)},
+    {skip: !user?.preferred_event_id},
+  );
+  const currentMonthGoal =
+    yearlyGoalData?.data?.months?.find(
+      (m: any) => m.month === currentMonth,
+    )?.goal ?? null;
+
   ///New Work here
 
   const [
@@ -278,6 +288,7 @@ const CalanderContainer = () => {
         showModal={showModal}
         setShowModal={setShowModal}
         handleCalendarPoints={handleCalendarPoints}
+        currentMonthGoal={currentMonthGoal}
       />
     </CustomScreenWrapper>
   );

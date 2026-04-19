@@ -3,9 +3,12 @@ import {homeReducer, loginReducer} from '../screen';
 import {
   CalanderApi,
   deviceConnectApi,
+  deviceTokenApi,
   forgotApi,
   HomeFullfilmentApi,
   loginApi,
+  monthlyGoalApi,
+  notificationsApi,
   questApi,
   statsApi,
   TeamsApi,
@@ -31,6 +34,9 @@ const rootReducer = combineReducers({
   [settingApi.reducerPath]: settingApi.reducer,
   [statsApi.reducerPath]: statsApi.reducer,
   [questApi.reducerPath]: questApi.reducer,
+  [deviceTokenApi.reducerPath]: deviceTokenApi.reducer,
+  [monthlyGoalApi.reducerPath]: monthlyGoalApi.reducer,
+  [notificationsApi.reducerPath]: notificationsApi.reducer,
 });
 
 export default rootReducer;

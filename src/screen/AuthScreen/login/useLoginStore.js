@@ -1,5 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import DeviceInfo from 'react-native-device-info';
+import { Platform } from 'react-native';
 import { store } from '../../../core/store';
+import { deviceTokenApi } from '../../../services/deviceToken.api';
 import { Routes } from '../../../utils/Routes';
 import { setActiveTab } from '../../Home/Home.slice';
 import {
@@ -38,6 +42,29 @@ const useLoginStore = create(set => ({
       const {token, ...rest} = response?.data;
       store.dispatch(setToken(token));
       store.dispatch(setUser({...rest, name: response?.data?.name}));
+
+      // Store FCM device token in the backend
+      try {
+        const fcmToken = await AsyncStorage.getItem('fcmToken');
+        if (fcmToken) {
+          const devicePayload = {
+            token: fcmToken,
+            platform: Platform.OS,
+            device_name: await DeviceInfo.getDeviceName(),
+            device_id: await DeviceInfo.getUniqueId(),
+            status: true,
+          };
+          await store
+            .dispatch(
+              deviceTokenApi.endpoints.saveDeviceToken.initiate(devicePayload),
+            )
+            .unwrap();
+          console.log('📲 Device token saved to backend');
+        }
+      } catch (err) {
+        console.log('saveDeviceToken error:', err?.data?.message || err);
+      }
+
       // Navigate to Dashboard upon successful login
       // Call the getCompleteProfile API
       try {
