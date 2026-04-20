@@ -7,7 +7,7 @@ import AuthNavigator from './AuthNavigator';
 import PublicNavigator from './PublicNavigator';
 
 const Navigation = () => {
-  const { token } = useSelector(state => state.loginReducer);
+  const {token} = useSelector(state => state.loginReducer);
   const [isBaseUrlReady, setIsBaseUrlReady] = useState(false);
   const linking = {
     prefixes: [

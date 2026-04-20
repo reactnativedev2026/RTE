@@ -18,7 +18,6 @@ interface NotificationsContainerProps {}
 const UI_TO_API_KEY: Record<string, string> = {
   behind_pace: 'monthly_behind_push',
   ahead_of_pace: 'monthly_ahead_push',
-  halfway_milestone: 'monthly_halfway_push',
   goal_completed: 'monthly_completed_push',
   monthly_reminder: 'monthly_reminder_push',
 };
@@ -38,7 +37,6 @@ const defaultEmailToggles = {
 const defaultPushToggles = {
   behind_pace: false,
   ahead_of_pace: false,
-  halfway_milestone: false,
   goal_completed: false,
   monthly_reminder: false,
 };

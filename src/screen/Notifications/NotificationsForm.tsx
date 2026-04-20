@@ -22,7 +22,6 @@ interface EmailToggleState {
 interface PushToggleState {
   behind_pace?: boolean;
   ahead_of_pace?: boolean;
-  halfway_milestone?: boolean;
   goal_completed?: boolean;
   monthly_reminder?: boolean;
 }
@@ -48,11 +47,6 @@ const PUSH_ITEMS: {key: keyof PushToggleState; title: string; description: strin
     key: 'ahead_of_pace',
     title: 'Ahead of pace',
     description: "Celebrate when you're ahead of your monthly goal",
-  },
-  {
-    key: 'halfway_milestone',
-    title: 'Halfway milestone',
-    description: "Notify when you've reached 50% of your monthly goal",
   },
   {
     key: 'goal_completed',

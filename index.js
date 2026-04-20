@@ -47,12 +47,26 @@ if (Platform.OS === 'android') {
 // Background FCM Message Handler
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   console.log('📩 Background FCM Message:', remoteMessage);
+  if (remoteMessage.notification) {
+    console.log('📩 Native FCM notification detected, skipping Notifee.');
+    return;
+  }
+
+  // 2. Extract content and check if it's empty to avoid "ghost" notifications (like 'RTE Notification' fallback)
+  const title = remoteMessage.data?.title || remoteMessage.notification?.title;
+  const body = remoteMessage.data?.body || remoteMessage.notification?.body;
+
+  if (!title && !body) {
+    console.log('📩 Empty notification content, skipping display.');
+    return;
+  }
 
   // Show notification for data-only messages in background
   try {
     await notifee.displayNotification({
-      title: remoteMessage.notification?.title || remoteMessage.data?.title || 'RTE Notification',
-      body: remoteMessage.notification?.body || remoteMessage.data?.body || 'You have a new update',
+      id: remoteMessage.messageId, // Sync with FCM message ID to prevent duplicates
+      title: title || 'RTE Notification',
+      body: body || 'You have a new update',
       data: remoteMessage.data,
       android: {
         channelId: 'com.loginsignupapp',
