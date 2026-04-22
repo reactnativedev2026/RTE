@@ -26,6 +26,7 @@ const EOD_SYNC_ENABLED_KEY = '@samsung_health_eod_sync_enabled';
 const HOURLY_RECONCILIATION_ENABLED_KEY =
   '@samsung_health_hourly_reconciliation_enabled';
 const RESYNC_SAMSUNG_SYNC_ID_KEY = '@samsung_health_resync_sync_id';
+const INITIAL_SYNC_COMPLETE_KEY = '@samsung_health_initial_sync_complete';
 
 import { MobileAppDebugService } from './MobileAppDebugService';
 
@@ -97,6 +98,8 @@ export interface SyncDataForDateResult {
     exercise_count: number;
   };
   error?: string;
+  error_type?: 'SAMSUNG_HEALTH_FETCH' | 'API_UPLOAD' | 'NONE';
+  api_response?: any;
 }
 
 export interface BackgroundSyncConfig {
@@ -122,6 +125,12 @@ class SamsungHealthBackgroundSyncService {
     null;
   private pushMobileAppUserDataFunction: ((payload: any) => Promise<any>) | null =
     null;
+  private createDataSourceApiFunction: ((payload: any) => Promise<any>) | null =
+    null;
+  private updateDataSourceApiFunction: ((payload: any) => Promise<any>) | null =
+    null;
+  private deviceId: string | null = null;
+  private isInitialSyncComplete: boolean = false; // Track if initial catch-up sync has finished
   private isSyncing: boolean = false;
   private appStateSubscription: any = null;
   private syncedTransactionIds: Set<string> = new Set(); // Stores individual exercise transaction IDs to detect new exercises
@@ -162,6 +171,9 @@ class SamsungHealthBackgroundSyncService {
     updateLastCronApiFunction?: (payload: any) => Promise<any>,
     getDataByDateApiFunction?: (payload: any) => Promise<any>,
     pushMobileAppUserDataFunction?: (payload: any) => Promise<any>,
+    createDataSourceApiFunction?: (payload: any) => Promise<any>,
+    updateDataSourceApiFunction?: (payload: any) => Promise<any>,
+    deviceId?: string,
   ): Promise<void> {
     // If already initialized, just update config and allowed data types
     if (this.isInitialized || this.isInitializing) {
@@ -179,6 +191,15 @@ class SamsungHealthBackgroundSyncService {
         }
         if (pushMobileAppUserDataFunction) {
           this.pushMobileAppUserDataFunction = pushMobileAppUserDataFunction;
+        }
+        if (createDataSourceApiFunction) {
+          this.createDataSourceApiFunction = createDataSourceApiFunction;
+        }
+        if (updateDataSourceApiFunction) {
+          this.updateDataSourceApiFunction = updateDataSourceApiFunction;
+        }
+        if (deviceId) {
+          this.deviceId = deviceId;
         }
         // Update allowed data types if provided
         if (config.allowedDataTypes) {
@@ -222,6 +243,15 @@ class SamsungHealthBackgroundSyncService {
     }
     if (pushMobileAppUserDataFunction) {
       this.pushMobileAppUserDataFunction = pushMobileAppUserDataFunction;
+    }
+    if (createDataSourceApiFunction) {
+      this.createDataSourceApiFunction = createDataSourceApiFunction;
+    }
+    if (updateDataSourceApiFunction) {
+      this.updateDataSourceApiFunction = updateDataSourceApiFunction;
+    }
+    if (deviceId) {
+      this.deviceId = deviceId;
     }
 
     // Load configuration from AsyncStorage
@@ -294,7 +324,7 @@ class SamsungHealthBackgroundSyncService {
     this.isInitialSync = false;
 
     // Perform initial day-by-day daily data sync (syncStartDate → today)
-    if (this.dailyDataSyncApiFunction) {
+    if (this.dailyDataSyncApiFunction && !this.isInitialSyncComplete) {
       await this.performInitialDailySync();
     }
 
@@ -374,11 +404,14 @@ class SamsungHealthBackgroundSyncService {
     this.dailyDataSyncApiFunction = null;
     this.updateLastCronApiFunction = null;
     this.pushMobileAppUserDataFunction = null;
+    this.updateDataSourceApiFunction = null;
     this.allowedDataTypes = [];
 
     // Reset flags
     this.isSyncing = false;
     this.isInitialSync = true;
+    this.isInitialSyncComplete = false;
+    await AsyncStorage.removeItem(INITIAL_SYNC_COMPLETE_KEY);
     this.isBackgroundFetchConfigured = false;
     this.isForegroundJobRunning = false;
     this.foregroundJobQueued = false;
@@ -410,6 +443,14 @@ class SamsungHealthBackgroundSyncService {
       const savedStartDate = await AsyncStorage.getItem(SYNC_START_DATE_KEY);
       if (savedStartDate !== null) {
         this.syncStartDate = new Date(savedStartDate);
+      }
+
+      // Load initial sync complete status
+      const savedInitialSyncComplete = await AsyncStorage.getItem(
+        INITIAL_SYNC_COMPLETE_KEY,
+      );
+      if (savedInitialSyncComplete !== null) {
+        this.isInitialSyncComplete = savedInitialSyncComplete === 'true';
       }
     } catch (error) {
       // Silent error
@@ -1090,6 +1131,8 @@ class SamsungHealthBackgroundSyncService {
       // Clear all synced data to force full resync
       console.log('[SamsungHealthSync] Clearing synced data for resync...');
       await this.clearSyncedData();
+      this.isInitialSyncComplete = false;
+      await AsyncStorage.removeItem(INITIAL_SYNC_COMPLETE_KEY);
 
       // Update sync start date to the resync_from date
       const resyncStartDate = new Date(resyncSamsungFrom);
@@ -1974,9 +2017,11 @@ class SamsungHealthBackgroundSyncService {
   private async syncDataForDate(
     targetDate: string,
     updatePoints: boolean = false,
+    isInitialSync: boolean = false,
   ): Promise<SyncDataForDateResult> {
     console.log('[SamsungHealthSync] Syncing data for date:', targetDate, {
       updatePoints,
+      isInitialSync,
     });
 
     const result: SyncDataForDateResult = {
@@ -1987,6 +2032,7 @@ class SamsungHealthBackgroundSyncService {
         distance_miles: 0,
         exercise_count: 0,
       },
+      error_type: 'NONE',
     };
 
     try {
@@ -2046,10 +2092,12 @@ class SamsungHealthBackgroundSyncService {
             activitySummaryData = fallbackResults[1] || [];
           } catch (fallbackError) {
             result.error = fallbackError?.message || 'Fallback fetch failed';
+            result.error_type = 'SAMSUNG_HEALTH_FETCH';
             return result;
           }
         } else {
           result.error = fetchError?.message || 'Fetch failed';
+          result.error_type = 'SAMSUNG_HEALTH_FETCH';
           return result;
         }
       }
@@ -2183,8 +2231,14 @@ class SamsungHealthBackgroundSyncService {
           `[SamsungHealthSync] Data synced successfully for ${targetDate}:`,
           apiResult,
         );
-      } catch (error) {
+        result.success = true;
+        result.api_response = apiResult;
+      } catch (error: any) {
         isSuccess = false;
+        result.error = error?.message || 'API failed';
+        result.error_type = 'API_UPLOAD';
+        result.api_response = error?.data || error;
+
         console.error(
           `[SamsungHealthSync] API failed after retry for ${targetDate}, sending fallback data`,
         );
@@ -2429,11 +2483,44 @@ class SamsungHealthBackgroundSyncService {
       return;
     }
 
+    // Log to mobile-app-user right before status report
+    if (this.pushMobileAppUserDataFunction) {
+      try {
+        const logData = {
+          log_type: 'initial_sync_log',
+          status: 'reporting_start',
+          date: startDate,
+          timestamp: new Date().toISOString(),
+        };
+        const wrappedLog = await MobileAppDebugService.wrapInitialSyncLog(logData);
+        await this.pushMobileAppUserDataFunction(wrappedLog);
+      } catch (err) {
+        console.error('[SamsungHealthSync] Failed to send initial sync log:', err);
+      }
+    }
+
+    // If this is an initial sync, report "start" to track progress
+    if (this.updateDataSourceApiFunction) {
+      try {
+        console.log('[SamsungHealthSync] Reporting initial sync as start...');
+        await this.updateDataSourceApiFunction({
+          data_source_id: 7, // Samsung Health
+          initial_sync_date: 'start',
+          "cron_start_date": startDate
+        });
+      } catch (error) {
+        console.error(
+          '[SamsungHealthSync] Failed to report initial sync start:',
+          error,
+        );
+      }
+    }
+
     let successCount = 0;
     let failCount = 0;
 
     for (const date of datesToSync) {
-      const syncResult = await this.syncDataForDate(date, true);
+      const syncResult = await this.syncDataForDate(date, true, true);
       if (syncResult.success) {
         successCount++;
       } else {
@@ -2448,6 +2535,39 @@ class SamsungHealthBackgroundSyncService {
       successful: successCount,
       failed: failCount,
     });
+
+    // Mark as complete and report to server
+    this.isInitialSyncComplete = true;
+    try {
+      await AsyncStorage.setItem(INITIAL_SYNC_COMPLETE_KEY, 'true');
+      if (this.pushMobileAppUserDataFunction) {
+        try {
+          const logData = {
+            log_type: 'initial_sync_log',
+            status: 'reporting_complete',
+            date: startDate,
+            timestamp: new Date().toISOString(),
+          };
+          const wrappedLog = await MobileAppDebugService.wrapInitialSyncLog(logData);
+          await this.pushMobileAppUserDataFunction(wrappedLog);
+        } catch (err) {
+          console.error('[SamsungHealthSync] Failed to send initial sync log:', err);
+        }
+      }
+      if (this.updateDataSourceApiFunction) {
+        console.log('[SamsungHealthSync] Reporting initial sync as complete...');
+        await this.updateDataSourceApiFunction({
+          data_source_id: 7, // Samsung Health
+          initial_sync_date: 'complete',
+          cron_start_date: startDate,
+        });
+      }
+    } catch (saveError) {
+      console.error(
+        '[SamsungHealthSync] Failed to save initial sync complete status:',
+        saveError,
+      );
+    }
   }
 
   /**
@@ -2708,16 +2828,15 @@ class SamsungHealthBackgroundSyncService {
       return;
     }
 
-    const { cron_start_date, days_to_process: rawDaysToProcess } = cronData;
+    let { cron_start_date, days_to_process: rawDaysToProcess } = cronData;
+
+    // Fallback to initial sync date if server returns null
+    if (!cron_start_date) {
+      cron_start_date = this.formatDateString(this.syncStartDate);
+    }
+
     const days_to_process =
       rawDaysToProcess && rawDaysToProcess > 0 ? rawDaysToProcess : 5;
-
-    if (!cron_start_date) {
-      console.log(
-        '[SamsungHealthSync] Foreground job: no cron_start_date, skipping',
-      );
-      return;
-    }
 
     console.log('[SamsungHealthSync] Foreground job: starting processing', {
       cron_start_date,
@@ -2759,7 +2878,10 @@ class SamsungHealthBackgroundSyncService {
           const summaryPayload = await MobileAppDebugService.wrapCronSummary(summary);
           await this.pushMobileAppUserDataFunction(summaryPayload);
           console.log('[SamsungHealthSync] 5-day cron skip summary sent to debug API');
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+
+
+        }
       }
 
       return;
@@ -2799,7 +2921,25 @@ class SamsungHealthBackgroundSyncService {
         }/${effectiveDaysToProcess}: ${currentDate}`,
       );
 
-      const syncResult = await this.syncDataForDate(currentDate, true);
+      let syncResult: SyncDataForDateResult;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (true) {
+        attempts++;
+        syncResult = await this.syncDataForDate(currentDate, true, true);
+
+        if (syncResult.success || attempts >= maxAttempts) {
+          break;
+        }
+
+        const backoffMs = Math.pow(2, attempts) * 1000; // 2s, 4s
+        console.log(
+          `[SamsungHealthSync] Foreground job: Failed to sync ${currentDate} (attempt ${attempts}/${maxAttempts}), retrying in ${backoffMs}ms...`,
+        );
+        await new Promise(res => setTimeout(res, backoffMs));
+      }
+
       cronResults.push(syncResult);
 
       if (syncResult.success) {
@@ -2888,9 +3028,27 @@ class SamsungHealthBackgroundSyncService {
         }
       } else {
         console.error(
-          `[SamsungHealthSync] Foreground job: failed to sync data for ${currentDate}, stopping batch`,
+          `[SamsungHealthSync] Foreground job: failed to sync data for ${currentDate} after retry. Recording error and moving to next day.`,
         );
-        break;
+
+        // Even on failure, we update the cron pointer to avoid getting stuck on this day forever
+        if (this.updateLastCronApiFunction) {
+          try {
+            await this.updateLastCronApiFunction({
+              data_source_id: 7,
+              cron_start_date: currentDate,
+            });
+            console.log(
+              `[SamsungHealthSync] Foreground job: cron_start_date updated to ${currentDate} (marked as attempted/skipped due to error)`,
+            );
+          } catch (cronError: any) {
+            console.error(
+              `[SamsungHealthSync] Foreground job: failed to update cron_start_date after failure for ${currentDate}:`,
+              cronError,
+            );
+          }
+        }
+        // No break here - proceed to next day
       }
 
       // Advance to the next day
@@ -2915,10 +3073,13 @@ class SamsungHealthBackgroundSyncService {
 
         const summaryPayload = await MobileAppDebugService.wrapCronSummary(summary);
 
-        await this.pushMobileAppUserDataFunction(summaryPayload);
-        console.log('[SamsungHealthSync] 5-day cron summary sent to debug API with device info');
+        await this.retryApiCall(
+          () => this.pushMobileAppUserDataFunction!(summaryPayload),
+          2, // 2 retries for the summary report
+        );
+        console.log('[SamsungHealthSync] 5-day cron summary sent successfully', summary);
       } catch (debugError: any) {
-        console.error('[SamsungHealthSync] Failed to send cron summary to debug API:', debugError);
+        console.error('[SamsungHealthSync] Failed to send cron summary after retries:', debugError);
       }
     }
 

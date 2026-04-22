@@ -20,6 +20,7 @@ import {
   useUpdateSamsungHealthLastCronMutation,
   useCheckUatAuthorizationQuery,
   usePushMobileAppUserDataMutation,
+  useUpdateDataSourceMutation,
 } from '../../services/deviceConnect.api';
 import {useLazyGetUserPointDetailQuery} from '../../services/Calander.api';
 import {useUpdateSyncDevicesMutation} from '../../services/setting.api';
@@ -48,6 +49,7 @@ const ConnectSamsung = ({}: ConnectSamsungProps) => {
   const [syncDailyData] = useSyncSamsungDailyDataMutation();
   const [updateLastCron] = useUpdateSamsungHealthLastCronMutation();
   const [pushMobileAppUserData] = usePushMobileAppUserDataMutation();
+  const [updateDataSource] = useUpdateDataSourceMutation();
   const [getDataByDate] = useLazyGetUserPointDetailQuery();
   const {data: uatAuthData} = useCheckUatAuthorizationQuery({}, {refetchOnMountOrArgChange: true});
 
@@ -208,6 +210,13 @@ const ConnectSamsung = ({}: ConnectSamsungProps) => {
             async (payload) => {
               return pushMobileAppUserData(payload).unwrap();
             },
+            async (payload) => {
+              return createDataSource(payload).unwrap();
+            },
+            async (payload) => {
+              return updateDataSource(payload).unwrap();
+            },
+            deviceId,
           );
         } catch (bgSyncError) {
           // Show error but don't fail the connection

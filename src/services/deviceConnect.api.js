@@ -1,5 +1,5 @@
-import {createApi} from '@reduxjs/toolkit/query/react';
-import {baseQuery} from './baseQuery';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { baseQuery } from './baseQuery';
 
 export const deviceConnectApi = createApi({
   reducerPath: 'deviceConnect/api',
@@ -19,16 +19,24 @@ export const deviceConnectApi = createApi({
     }),
     // Update Daily Steps status for a specific event
     updateUserEventDailySteps: build.mutation({
-      query: ({event_id, include_daily_steps}) => ({
+      query: ({ event_id, include_daily_steps }) => ({
         url: '/user/event/daily-steps',
         method: 'POST',
-        body: {event_id, include_daily_steps},
+        body: { event_id, include_daily_steps },
       }),
     }),
     // Data_Source
     createDataSource: build.mutation({
       query: body => ({
         url: '/user/source/profiles/create',
+        method: 'POST',
+        body: body,
+      }),
+      invalidatesTags: ['deviceList'],
+    }),
+    updateDataSource: build.mutation({
+      query: body => ({
+        url: '/user/source/profiles/update',
         method: 'POST',
         body: body,
       }),
@@ -90,6 +98,7 @@ export const {
   useGetDeviceSyncQuery,
   useCheckUatAuthorizationQuery,
   useCreateDataSourceMutation,
+  useUpdateDataSourceMutation,
   useDeleteDataSourceMutation,
   useUpdateUserEventDailyStepsMutation,
   useSyncSamsungExerciseDataMutation,

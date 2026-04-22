@@ -8,9 +8,12 @@ import {
   useUpdateSamsungHealthLastCronMutation,
   useCheckUatAuthorizationQuery,
   usePushMobileAppUserDataMutation,
+  useCreateDataSourceMutation,
+  useUpdateDataSourceMutation,
 } from '../services/deviceConnect.api';
 import { useLazyGetUserPointDetailQuery } from '../services/Calander.api';
 import {Platform} from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 
 /**
  * Hook to initialize Samsung Health background sync on app start
@@ -22,6 +25,8 @@ export const useSamsungHealthBackgroundSync = () => {
   const [syncDailyData] = useSyncSamsungDailyDataMutation();
   const [updateLastCron] = useUpdateSamsungHealthLastCronMutation();
   const [pushMobileAppUserData] = usePushMobileAppUserDataMutation();
+  const [createDataSource] = useCreateDataSourceMutation();
+  const [updateDataSource] = useUpdateDataSourceMutation();
   const [getDataByDate] = useLazyGetUserPointDetailQuery();
   const {data: uatAuthData} = useCheckUatAuthorizationQuery(
     {},
@@ -76,6 +81,16 @@ export const useSamsungHealthBackgroundSync = () => {
             console.log(payload, 'this is payload')
             return getDataByDate(payload).unwrap();
           },
+          async (payload) => {
+            return pushMobileAppUserData(payload).unwrap();
+          },
+          async (payload) => {
+            return createDataSource(payload).unwrap();
+          },
+          async (payload) => {
+            return updateDataSource(payload).unwrap();
+          },
+          DeviceInfo.getUniqueIdSync(),
         );
       } catch (error) {
         // Silent error

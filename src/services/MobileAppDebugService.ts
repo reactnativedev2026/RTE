@@ -1,4 +1,4 @@
-import {Platform} from 'react-native';
+import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -14,7 +14,7 @@ import {
   HOURLY_RECONCILIATION_ENABLED_KEY,
   RESYNC_SAMSUNG_SYNC_ID_KEY,
 } from './SamsungHealthBackgroundSync';
-import {SamsungHealth} from './SamsungHealthService';
+import { SamsungHealth } from './SamsungHealthService';
 
 /**
  * Interface for the mobile app user debug data payload
@@ -23,6 +23,7 @@ export interface MobileAppUserPayload {
   model: string;
   system_version: string;
   app_version: string;
+  log_type?: string;
   debug_data: Record<string, any>;
 }
 
@@ -58,7 +59,7 @@ class MobileAppDebugServiceClass {
       return deviceInfo;
     } catch (error: any) {
       console.error('[MobileAppDebugService] Error collecting device info:', error);
-      return {error: error?.message || 'Failed to collect device info'};
+      return { error: error?.message || 'Failed to collect device info' };
     }
   }
 
@@ -81,7 +82,7 @@ class MobileAppDebugServiceClass {
         const allowedDataTypes = syncDebugInfo?.serviceState?.allowedDataTypes || ['STEPS', 'EXERCISE'];
         permissionsInfo = await SamsungHealth.checkGrantedPermissions(allowedDataTypes);
       } catch (permError: any) {
-        permissionsInfo = {error: permError?.message || 'Failed to check permissions'};
+        permissionsInfo = { error: permError?.message || 'Failed to check permissions' };
       }
 
       return {
@@ -90,7 +91,7 @@ class MobileAppDebugServiceClass {
       };
     } catch (error: any) {
       console.error('[MobileAppDebugService] Error collecting Samsung Health data:', error);
-      return {error: error?.message || 'Failed to collect Samsung Health data'};
+      return { error: error?.message || 'Failed to collect Samsung Health data' };
     }
   }
 
@@ -153,7 +154,7 @@ class MobileAppDebugServiceClass {
       return storageData;
     } catch (error: any) {
       console.error('[MobileAppDebugService] Error collecting storage data:', error);
-      return {error: error?.message || 'Failed to collect storage data'};
+      return { error: error?.message || 'Failed to collect storage data' };
     }
   }
 
@@ -198,7 +199,7 @@ class MobileAppDebugServiceClass {
   /**
    * Collect all debug data and build the payload for API submission
    */
-  async collectDebugData(): Promise<MobileAppUserPayload> {
+  async collectDebugData(logType: string = 'debug_info'): Promise<MobileAppUserPayload> {
     const timestamp = new Date().toISOString();
 
     // Collect all data in parallel where possible
@@ -241,6 +242,7 @@ class MobileAppDebugServiceClass {
       model,
       system_version: systemVersion,
       app_version: appVersion,
+      log_type: logType,
       debug_data: debugData,
     };
   }
@@ -249,13 +251,29 @@ class MobileAppDebugServiceClass {
    * Helper to wrap a 5-day cron summary with device information
    */
   async wrapCronSummary(summary: any): Promise<MobileAppUserPayload> {
-    const basePayload = await this.collectDebugData();
+    const basePayload = await this.collectDebugData('cron_summary');
 
     return {
       ...basePayload,
       debug_data: {
         ...basePayload.debug_data,
         cron_summary: summary,
+      },
+    };
+
+  }
+
+  /**
+   * Helper to wrap an initial sync log with device information
+   */
+  async wrapInitialSyncLog(log: any): Promise<MobileAppUserPayload> {
+    const basePayload = await this.collectDebugData('initial_sync_log');
+
+    return {
+      ...basePayload,
+      debug_data: {
+        ...basePayload.debug_data,
+        initial_sync_log: log,
       },
     };
   }
