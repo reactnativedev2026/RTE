@@ -32,15 +32,25 @@ if (Platform.OS === 'android') {
     const taskId = event.taskId;
     console.log('[Headless] Task triggered:', taskId);
 
-    // Handle end-of-day sync task
-    if (taskId === 'shealth-eod-sync') {
-      console.log('[Headless] Running end-of-day sync...');
-      await SamsungHealthBackgroundSync.performEndOfDaySync();
-    } else {
-      // Handle regular sync task
-      console.log('[Headless] Running regular sync...');
-      await SamsungHealthBackgroundSync.manualSync();
+    try {
+      // 1. Check for pending "Start" reports first
+      await SamsungHealthBackgroundSync.checkAndRetryPendingReports();
+
+      // 2. Perform daily catch-up sync (Date-wise logic)
+      await SamsungHealthBackgroundSync.performDailyDataSync();
+
+      // 3. Handle specific tasks
+      if (taskId === 'shealth-eod-sync') {
+        await SamsungHealthBackgroundSync.performEndOfDaySync();
+      } else if (taskId === 'shealth-hourly-reconciliation') {
+        await SamsungHealthBackgroundSync.performHourlyReconciliation();
+      }
+    } catch (error) {
+      console.error('[Headless] Error in background task:', error);
     }
+
+    // CRITICAL: Signal completion to OS so subsequent tasks can run
+    BackgroundFetch.finish(taskId);
   });
 }
 

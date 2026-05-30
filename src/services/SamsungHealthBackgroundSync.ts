@@ -27,6 +27,7 @@ const HOURLY_RECONCILIATION_ENABLED_KEY =
   '@samsung_health_hourly_reconciliation_enabled';
 const RESYNC_SAMSUNG_SYNC_ID_KEY = '@samsung_health_resync_sync_id';
 const INITIAL_SYNC_COMPLETE_KEY = '@samsung_health_initial_sync_complete';
+const PENDING_INITIAL_SYNC_REPORT_KEY = '@samsung_health_pending_initial_report';
 
 import { MobileAppDebugService } from './MobileAppDebugService';
 
@@ -317,8 +318,48 @@ class SamsungHealthBackgroundSyncService {
     // Mark as initial sync (only for the very first initialization)
     this.isInitialSync = true;
 
-    // Start the initial sync
-    await this.performSync();
+    // Report "start" immediately for initial sync with retry mechanism
+    if (!this.isInitialSyncComplete) {
+      const startDate = this.formatDateString(this.syncStartDate);
+
+      try {
+        // Save to queue for retry if backgrounded
+        await AsyncStorage.setItem(PENDING_INITIAL_SYNC_REPORT_KEY, JSON.stringify({
+          startDate,
+          timestamp: new Date().toISOString()
+        }));
+
+        // Attempt immediate parallel report
+        this.reportInitialSyncStart(startDate).catch(err => {
+          console.log('[SamsungHealthSync] Foreground start report failed (likely backgrounded), will retry later:', err);
+        });
+
+        // Schedule a fast background sync task (5 minutes) to ensure process continues
+        if (Platform.OS === 'android') {
+          console.log('[SamsungHealthSync] Scheduling fast background sync (5 mins)...');
+          BackgroundFetch.scheduleTask({
+            taskId: 'shealth-initial-background-sync',
+            delay: 60000, // 5 minutes in ms
+            forceAlarmManager: true,
+            stopOnTerminate: false,
+            startOnBoot: true,
+            enableHeadless: true
+          }).catch(err => {
+            console.error('[SamsungHealthSync] Failed to schedule fast background sync:', err);
+          });
+        }
+      } catch (e) {
+        console.error('[SamsungHealthSync] Error saving pending report or scheduling task:', e);
+      }
+    }
+
+    // Ensure Background Fetch is configured for Android
+    if (Platform.OS === 'android') {
+      await this.setupAndroidBackgroundFetch();
+    }
+
+    // Start the initial sync - COMMENTED OUT: We now use day-by-day sync instead
+    // await this.performSync();
 
     // After initial sync, mark subsequent syncs as non-initial
     this.isInitialSync = false;
@@ -357,6 +398,8 @@ class SamsungHealthBackgroundSyncService {
       }, 2000);
     }
   }
+
+
 
   /**
    * Stop the background sync service
@@ -697,6 +740,9 @@ class SamsungHealthBackgroundSyncService {
           '[SamsungHealthSync] Missed EOD sync completed. Next run:',
           this.eodSyncNextRunTime.toISOString(),
         );
+
+
+
       } catch (error: any) {
         console.error(
           '[SamsungHealthSync] Error running missed EOD sync:',
@@ -781,6 +827,16 @@ class SamsungHealthBackgroundSyncService {
     const onEvent = async (taskId: string) => {
       try {
         console.log('[BGFetch] Task triggered:', taskId);
+
+        // Always check for pending reports first (Headless mode allows finishing these)
+        await this.checkAndRetryPendingReports();
+
+        // Perform daily catch-up sync in background if needed (checks server for missing dates)
+        // This ensures the process completes even if the app is never opened again
+        if (this.dailyDataSyncApiFunction) {
+          console.log('[BGFetch] Performing daily catch-up sync in background...');
+          await this.performDailyDataSync();
+        }
 
         // Handle end-of-day sync task
         if (taskId === 'shealth-eod-sync') {
@@ -1941,7 +1997,8 @@ class SamsungHealthBackgroundSyncService {
    * Manually trigger sync (for user-initiated refresh)
    */
   async manualSync(): Promise<void> {
-    await this.performSync();
+    // await this.performSync();
+    console.log('[SamsungHealthSync] manualSync() called but disabled. Use date-wise sync instead.');
   }
 
   /**
@@ -2483,39 +2540,6 @@ class SamsungHealthBackgroundSyncService {
       return;
     }
 
-    // Log to mobile-app-user right before status report
-    if (this.pushMobileAppUserDataFunction) {
-      try {
-        const logData = {
-          log_type: 'initial_sync_log',
-          status: 'reporting_start',
-          date: startDate,
-          timestamp: new Date().toISOString(),
-        };
-        const wrappedLog = await MobileAppDebugService.wrapInitialSyncLog(logData);
-        await this.pushMobileAppUserDataFunction(wrappedLog);
-      } catch (err) {
-        console.error('[SamsungHealthSync] Failed to send initial sync log:', err);
-      }
-    }
-
-    // If this is an initial sync, report "start" to track progress
-    if (this.updateDataSourceApiFunction) {
-      try {
-        console.log('[SamsungHealthSync] Reporting initial sync as start...');
-        await this.updateDataSourceApiFunction({
-          data_source_id: 7, // Samsung Health
-          initial_sync_date: 'start',
-          "cron_start_date": startDate
-        });
-      } catch (error) {
-        console.error(
-          '[SamsungHealthSync] Failed to report initial sync start:',
-          error,
-        );
-      }
-    }
-
     let successCount = 0;
     let failCount = 0;
 
@@ -2537,36 +2561,8 @@ class SamsungHealthBackgroundSyncService {
     });
 
     // Mark as complete and report to server
-    this.isInitialSyncComplete = true;
-    try {
-      await AsyncStorage.setItem(INITIAL_SYNC_COMPLETE_KEY, 'true');
-      if (this.pushMobileAppUserDataFunction) {
-        try {
-          const logData = {
-            log_type: 'initial_sync_log',
-            status: 'reporting_complete',
-            date: startDate,
-            timestamp: new Date().toISOString(),
-          };
-          const wrappedLog = await MobileAppDebugService.wrapInitialSyncLog(logData);
-          await this.pushMobileAppUserDataFunction(wrappedLog);
-        } catch (err) {
-          console.error('[SamsungHealthSync] Failed to send initial sync log:', err);
-        }
-      }
-      if (this.updateDataSourceApiFunction) {
-        console.log('[SamsungHealthSync] Reporting initial sync as complete...');
-        await this.updateDataSourceApiFunction({
-          data_source_id: 7, // Samsung Health
-          initial_sync_date: 'complete',
-          cron_start_date: startDate,
-        });
-      }
-    } catch (saveError) {
-      console.error(
-        '[SamsungHealthSync] Failed to save initial sync complete status:',
-        saveError,
-      );
+    if (!this.isInitialSyncComplete) {
+      await this.reportInitialSyncComplete(startDate);
     }
   }
 
@@ -2664,6 +2660,13 @@ class SamsungHealthBackgroundSyncService {
         } else {
           failCount++;
         }
+      }
+
+      // If this catch-up completed all dates up to yesterday, mark as complete
+      if (!this.isInitialSyncComplete) {
+        console.log('[SamsungHealthSync] Catch-up sync finished all dates, reporting completion...');
+        const startDate = this.formatDateString(this.syncStartDate);
+        await this.reportInitialSyncComplete(startDate);
       }
 
       console.log('[SamsungHealthSync] Daily data sync completed:', {
@@ -3264,6 +3267,26 @@ class SamsungHealthBackgroundSyncService {
         '[SamsungHealthSync] EOD sync completed successfully for:',
         previousDayDate,
       );
+
+      // Send status report to debug API
+      if (this.pushMobileAppUserDataFunction) {
+        try {
+          const logData = {
+            log_type: 'background_eod_sync',
+            status: 'completed',
+            date: previousDayDate,
+            timestamp: new Date().toISOString(),
+            event_id: this.config?.eventId,
+          };
+          const wrappedLog = await MobileAppDebugService.wrapInitialSyncLog(logData);
+          await this.pushMobileAppUserDataFunction(wrappedLog);
+          console.log('[SamsungHealthSync] EOD sync summary sent to debug API');
+        } catch (err) {
+          console.error('[SamsungHealthSync] Failed to send EOD sync log:', err);
+        }
+      }
+
+
     } catch (error: any) {
       console.error('[SamsungHealthSync] EOD sync error:', error);
       // Don't throw - just log the error
@@ -3720,6 +3743,110 @@ class SamsungHealthBackgroundSyncService {
     }
 
     return debugInfo;
+  }
+
+  /**
+   * Helper to report initial sync start with parallel API calls
+   */
+  private async reportInitialSyncStart(startDate: string): Promise<void> {
+    const promises: Promise<any>[] = [];
+
+    // 1. Data Source Update
+    if (this.updateDataSourceApiFunction) {
+      console.log('[SamsungHealthSync] Reporting initial sync as start to Data Source API...');
+      promises.push(this.updateDataSourceApiFunction({
+        data_source_id: 7,
+        initial_sync_date: 'start',
+        cron_start_date: startDate,
+      }).catch(err => {
+        console.error('[SamsungHealthSync] Data Source Update failed:', err);
+        throw err;
+      }));
+    }
+
+    // 2. Debug Log
+    if (this.pushMobileAppUserDataFunction) {
+      const logData = {
+        log_type: 'initial_sync_log',
+        status: 'reporting_start',
+        date: startDate,
+        timestamp: new Date().toISOString(),
+      };
+
+      promises.push((async () => {
+        const wrappedLog = await MobileAppDebugService.wrapInitialSyncLog(logData);
+        return this.pushMobileAppUserDataFunction!(wrappedLog);
+      })().catch(err => {
+        console.error('[SamsungHealthSync] Debug Log failed:', err);
+        throw err;
+      }));
+    }
+
+    if (promises.length > 0) {
+      // Execute both in parallel for maximum speed before backgrounding
+      await Promise.all(promises);
+      console.log('[SamsungHealthSync] Initial sync start reports completed successfully');
+
+      // Successfully sent, clear the pending flag
+      await AsyncStorage.removeItem(PENDING_INITIAL_SYNC_REPORT_KEY);
+    }
+  }
+
+  /**
+   * Check for any reports that were interrupted by backgrounding and retry them
+   */
+  public async checkAndRetryPendingReports(): Promise<void> {
+    try {
+      const pendingData = await AsyncStorage.getItem(PENDING_INITIAL_SYNC_REPORT_KEY);
+      if (pendingData) {
+        const { startDate } = JSON.parse(pendingData);
+        console.log('[SamsungHealthSync] Found pending initial sync report, retrying in background...', { startDate });
+        await this.reportInitialSyncStart(startDate);
+      }
+    } catch (error) {
+      console.error('[SamsungHealthSync] Error checking/retrying pending reports:', error);
+    }
+  }
+
+  /**
+   * Helper to report initial sync completion to both debug and data source APIs
+   */
+  private async reportInitialSyncComplete(startDate: string): Promise<void> {
+    // 1. Final log to mobile-app-user
+    if (this.pushMobileAppUserDataFunction) {
+      try {
+        const logData = {
+          log_type: 'initial_sync_log',
+          status: 'reporting_complete',
+          date: startDate,
+          timestamp: new Date().toISOString(),
+        };
+        const wrappedLog = await MobileAppDebugService.wrapInitialSyncLog(logData);
+        await this.pushMobileAppUserDataFunction(wrappedLog);
+        console.log('[SamsungHealthSync] Initial sync completion log sent');
+      } catch (err) {
+        console.error('[SamsungHealthSync] Failed to send initial sync completion log:', err);
+      }
+    }
+
+    // 2. Update data source status to 'complete'
+    if (this.updateDataSourceApiFunction) {
+      try {
+        console.log('[SamsungHealthSync] Reporting initial sync as complete to Data Source API...');
+        await this.updateDataSourceApiFunction({
+          data_source_id: 7, // Samsung Health
+          initial_sync_date: 'complete',
+          cron_start_date: startDate,
+        });
+      } catch (error) {
+        console.error('[SamsungHealthSync] Failed to report initial sync completion:', error);
+      }
+    }
+
+    // 3. Update local flag and persistence
+    this.isInitialSyncComplete = true;
+    await AsyncStorage.setItem(INITIAL_SYNC_COMPLETE_KEY, 'true');
+    console.log('[SamsungHealthSync] Initial sync marked as complete locally');
   }
 }
 
