@@ -28,6 +28,7 @@ const HOURLY_RECONCILIATION_ENABLED_KEY =
 const RESYNC_SAMSUNG_SYNC_ID_KEY = '@samsung_health_resync_sync_id';
 const INITIAL_SYNC_COMPLETE_KEY = '@samsung_health_initial_sync_complete';
 const PENDING_INITIAL_SYNC_REPORT_KEY = '@samsung_health_pending_initial_report';
+const INITIAL_SYNC_PROGRESS_KEY = '@samsung_health_initial_sync_progress_date';
 
 import { MobileAppDebugService } from './MobileAppDebugService';
 
@@ -132,6 +133,7 @@ class SamsungHealthBackgroundSyncService {
     null;
   private deviceId: string | null = null;
   private isInitialSyncComplete: boolean = false; // Track if initial catch-up sync has finished
+  private isInitialSyncRunning: boolean = false; // Prevent concurrent runs of performInitialDailySync
   private isSyncing: boolean = false;
   private appStateSubscription: any = null;
   private syncedTransactionIds: Set<string> = new Set(); // Stores individual exercise transaction IDs to detect new exercises
@@ -336,10 +338,10 @@ class SamsungHealthBackgroundSyncService {
 
         // Schedule a fast background sync task (5 minutes) to ensure process continues
         if (Platform.OS === 'android') {
-          console.log('[SamsungHealthSync] Scheduling fast background sync (5 mins)...');
+          console.log('[SamsungHealthSync] Scheduling fast background sync (1 min)...');
           BackgroundFetch.scheduleTask({
             taskId: 'shealth-initial-background-sync',
-            delay: 60000, // 5 minutes in ms
+            delay: 60000, // 1 minute in ms
             forceAlarmManager: true,
             stopOnTerminate: false,
             startOnBoot: true,
@@ -364,14 +366,19 @@ class SamsungHealthBackgroundSyncService {
     // After initial sync, mark subsequent syncs as non-initial
     this.isInitialSync = false;
 
-    // Perform initial day-by-day daily data sync (syncStartDate → today)
-    if (this.dailyDataSyncApiFunction && !this.isInitialSyncComplete) {
-      await this.performInitialDailySync();
-    }
-
-    // Mark service as initialized
+    // Mark service as initialized before starting background sync
+    // so the caller (ConnectSamsung) gets control back immediately
     this.isInitialized = true;
     this.isInitializing = false;
+
+    // Perform initial day-by-day daily data sync in background (syncStartDate → today)
+    // Fire-and-forget: do NOT await so initialize() returns immediately and the
+    // "device connected / data sync in progress" message can be shown to the user.
+    if (this.dailyDataSyncApiFunction && !this.isInitialSyncComplete) {
+      this.performInitialDailySync().catch(err => {
+        console.error('[SamsungHealthSync] Background initial daily sync failed:', err);
+      });
+    }
 
     // Set up auto-refresh
     this.startAutoRefresh();
@@ -454,7 +461,9 @@ class SamsungHealthBackgroundSyncService {
     this.isSyncing = false;
     this.isInitialSync = true;
     this.isInitialSyncComplete = false;
+    this.isInitialSyncRunning = false;
     await AsyncStorage.removeItem(INITIAL_SYNC_COMPLETE_KEY);
+    await AsyncStorage.removeItem(INITIAL_SYNC_PROGRESS_KEY);
     this.isBackgroundFetchConfigured = false;
     this.isForegroundJobRunning = false;
     this.foregroundJobQueued = false;
@@ -694,6 +703,13 @@ class SamsungHealthBackgroundSyncService {
       'change',
       async (nextAppState: AppStateStatus) => {
         if (nextAppState === 'active') {
+          // Resume initial sync if it was interrupted by backgrounding
+          if (!this.isInitialSyncComplete && this.dailyDataSyncApiFunction) {
+            console.log('[SamsungHealthSync] App returned to foreground — resuming initial daily sync');
+            this.performInitialDailySync().catch(err => {
+              console.error('[SamsungHealthSync] Resumed initial daily sync failed:', err);
+            });
+          }
           await this.performSync();
           // Check if EOD sync was missed and run it if needed
           await this.checkAndRunMissedEodSync();
@@ -831,11 +847,16 @@ class SamsungHealthBackgroundSyncService {
         // Always check for pending reports first (Headless mode allows finishing these)
         await this.checkAndRetryPendingReports();
 
-        // Perform daily catch-up sync in background if needed (checks server for missing dates)
-        // This ensures the process completes even if the app is never opened again
+        // If initial sync not yet complete, continue it from last saved progress.
+        // Otherwise run the regular daily catch-up sync.
         if (this.dailyDataSyncApiFunction) {
-          console.log('[BGFetch] Performing daily catch-up sync in background...');
-          await this.performDailyDataSync();
+          if (!this.isInitialSyncComplete) {
+            console.log('[BGFetch] Initial sync incomplete — resuming initial daily sync in background...');
+            await this.performInitialDailySync();
+          } else {
+            console.log('[BGFetch] Performing daily catch-up sync in background...');
+            await this.performDailyDataSync();
+          }
         }
 
         // Handle end-of-day sync task
@@ -1188,7 +1209,9 @@ class SamsungHealthBackgroundSyncService {
       console.log('[SamsungHealthSync] Clearing synced data for resync...');
       await this.clearSyncedData();
       this.isInitialSyncComplete = false;
+      this.isInitialSyncRunning = false;
       await AsyncStorage.removeItem(INITIAL_SYNC_COMPLETE_KEY);
+      await AsyncStorage.removeItem(INITIAL_SYNC_PROGRESS_KEY);
 
       // Update sync start date to the resync_from date
       const resyncStartDate = new Date(resyncSamsungFrom);
@@ -2388,7 +2411,6 @@ class SamsungHealthBackgroundSyncService {
               date: targetDate,
               event_id: this.config.eventId,
               transaction_id: `daily_steps_zero`,
-              note: 'Auto-sync: No movement detected'
             }];
           }
 
@@ -2452,7 +2474,6 @@ class SamsungHealthBackgroundSyncService {
             date: targetDate,
             event_id: this.config.eventId,
             transaction_id: `${result.error}`,
-            note: `Auto-fallback due to error: ${result.error.substring(0, 100)}`,
           };
 
           console.log(
@@ -2513,56 +2534,78 @@ class SamsungHealthBackgroundSyncService {
       return;
     }
 
-    const todayDate = this.formatDateString(new Date());
-    const syncStartDateStr = this.formatDateString(this.syncStartDate);
-
-    const startDate = syncStartDateStr;
-
-    if (startDate > todayDate) {
-      console.log(
-        '[SamsungHealthSync] Initial daily sync: all dates already processed',
-      );
+    // Prevent concurrent runs (e.g. foreground resume + BGFetch firing at same time)
+    if (this.isInitialSyncRunning) {
+      console.log('[SamsungHealthSync] Initial daily sync already running, skipping duplicate call');
       return;
     }
-
-    const datesToSync = this.getDateRange(startDate, todayDate);
-    console.log(
-      `[SamsungHealthSync] Initial daily sync: ${datesToSync.length} day(s) from ${startDate} to ${todayDate}`,
-    );
+    this.isInitialSyncRunning = true;
 
     try {
-      await SamsungHealth.initialize();
-    } catch (error: any) {
-      console.error(
-        '[SamsungHealthSync] Initial daily sync - Samsung Health init failed:',
-        error,
-      );
-      return;
-    }
+      const todayDate = this.formatDateString(new Date());
+      const syncStartDateStr = this.formatDateString(this.syncStartDate);
 
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const date of datesToSync) {
-      const syncResult = await this.syncDataForDate(date, true, true);
-      if (syncResult.success) {
-        successCount++;
-      } else {
-        failCount++;
+      if (syncStartDateStr > todayDate) {
+        console.log('[SamsungHealthSync] Initial daily sync: all dates already processed');
+        return;
       }
-      // Add a short delay to avoid hammering the server with rapid requests
-      await new Promise(res => setTimeout(res, 250));
-    }
 
-    console.log('[SamsungHealthSync] Initial daily sync completed:', {
-      totalDates: datesToSync.length,
-      successful: successCount,
-      failed: failCount,
-    });
+      // Resume from last saved progress if interrupted (app backgrounded/killed)
+      let resumeFromDate: string | null = null;
+      try {
+        resumeFromDate = await AsyncStorage.getItem(INITIAL_SYNC_PROGRESS_KEY);
+      } catch (_) {}
 
-    // Mark as complete and report to server
-    if (!this.isInitialSyncComplete) {
-      await this.reportInitialSyncComplete(startDate);
+      const effectiveStart = resumeFromDate && resumeFromDate > syncStartDateStr
+        ? resumeFromDate
+        : syncStartDateStr;
+
+      const datesToSync = this.getDateRange(effectiveStart, todayDate);
+      console.log(
+        `[SamsungHealthSync] Initial daily sync: ${datesToSync.length} day(s) from ${effectiveStart} to ${todayDate}`,
+        resumeFromDate ? `(resumed from ${resumeFromDate})` : '(fresh start)',
+      );
+
+      try {
+        await SamsungHealth.initialize();
+      } catch (error: any) {
+        console.error('[SamsungHealthSync] Initial daily sync - Samsung Health init failed:', error);
+        return;
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const date of datesToSync) {
+        const syncResult = await this.syncDataForDate(date, true, true);
+        if (syncResult.success) {
+          successCount++;
+          // Save progress so BGFetch / next foreground resume can continue from here
+          try {
+            await AsyncStorage.setItem(INITIAL_SYNC_PROGRESS_KEY, date);
+          } catch (_) {}
+        } else {
+          failCount++;
+        }
+        // Short delay to avoid hammering the server
+        await new Promise(res => setTimeout(res, 250));
+      }
+
+      console.log('[SamsungHealthSync] Initial daily sync completed:', {
+        totalDates: datesToSync.length,
+        successful: successCount,
+        failed: failCount,
+      });
+
+      // Mark as complete and clean up progress key
+      if (!this.isInitialSyncComplete) {
+        await this.reportInitialSyncComplete(syncStartDateStr);
+      }
+      try {
+        await AsyncStorage.removeItem(INITIAL_SYNC_PROGRESS_KEY);
+      } catch (_) {}
+    } finally {
+      this.isInitialSyncRunning = false;
     }
   }
 

@@ -4,6 +4,10 @@
 import * as React from 'react';
 import { AppRegistry, Platform, LogBox } from 'react-native';
 import BackgroundFetch from 'react-native-background-fetch';
+import { PaperProvider } from 'react-native-paper';
+import { name as appName } from './app.json';
+import App from './App';
+import { SamsungHealthBackgroundSync } from './src/services/SamsungHealthBackgroundSync';
 import messaging from '@react-native-firebase/messaging';
 import notifee, { EventType, AndroidImportance } from '@notifee/react-native';
 
@@ -11,10 +15,6 @@ LogBox.ignoreLogs([
   'Warning: Encountered two children with the same key, `[object Object]`. Keys should be unique so that components maintain',
   'VirtualizedLists should never be nested inside plain ScrollViews with the same orientation',
 ]);
-import { PaperProvider } from 'react-native-paper';
-import { name as appName } from './app.json';
-import App from './App';
-import { SamsungHealthBackgroundSync } from './src/services/SamsungHealthBackgroundSync';
 import { handleNavigation } from './NotificationHandler';
 
 export default function Main() {
@@ -25,6 +25,26 @@ export default function Main() {
   );
 }
 
+messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+  console.log('[Background FCM]', remoteMessage);
+
+  await notifee.createChannel({
+    id: 'com.loginsignupapp',
+    name: 'RunTheEdge Notifications',
+    importance: AndroidImportance.HIGH,
+  });
+
+  await notifee.displayNotification({
+    title: remoteMessage?.notification?.title || 'New Notification',
+    body: remoteMessage?.notification?.body || 'You have a new message',
+    android: {
+      channelId: 'com.loginsignupapp',
+      importance: AndroidImportance.HIGH,
+      pressAction: { id: 'default' },
+    },
+  });
+});
+
 AppRegistry.registerComponent(appName, () => Main);
 
 if (Platform.OS === 'android') {
@@ -32,25 +52,15 @@ if (Platform.OS === 'android') {
     const taskId = event.taskId;
     console.log('[Headless] Task triggered:', taskId);
 
-    try {
-      // 1. Check for pending "Start" reports first
-      await SamsungHealthBackgroundSync.checkAndRetryPendingReports();
-
-      // 2. Perform daily catch-up sync (Date-wise logic)
-      await SamsungHealthBackgroundSync.performDailyDataSync();
-
-      // 3. Handle specific tasks
-      if (taskId === 'shealth-eod-sync') {
-        await SamsungHealthBackgroundSync.performEndOfDaySync();
-      } else if (taskId === 'shealth-hourly-reconciliation') {
-        await SamsungHealthBackgroundSync.performHourlyReconciliation();
-      }
-    } catch (error) {
-      console.error('[Headless] Error in background task:', error);
+    // Handle end-of-day sync task
+    if (taskId === 'shealth-eod-sync') {
+      console.log('[Headless] Running end-of-day sync...');
+      await SamsungHealthBackgroundSync.performEndOfDaySync();
+    } else {
+      // Handle regular sync task
+      console.log('[Headless] Running regular sync...');
+      await SamsungHealthBackgroundSync.manualSync();
     }
-
-    // CRITICAL: Signal completion to OS so subsequent tasks can run
-    BackgroundFetch.finish(taskId);
   });
 }
 

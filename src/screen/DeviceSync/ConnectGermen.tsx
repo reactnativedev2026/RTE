@@ -42,7 +42,7 @@ const ConnectGermen = ({}: ConnectGermenProps) => {
 
   // Params
   const params = route?.params as
-    | {access_token?: string; access_token_secret?: string}
+    | {access_token?: string; access_token_secret?: string; refresh_token?: string; token_expires_at?: string}
     | undefined;
   // States
   const [formValues, setFormValues] = React.useState({
@@ -63,10 +63,12 @@ const ConnectGermen = ({}: ConnectGermenProps) => {
   const [getEventList] = useLazyGetEventListingQuery();
 
   const hitCreateDatasourceAPI = async () => {
-    const body = {
+    const body: any = {
       data_source_id: 3,
       access_token: params?.access_token,
       access_token_secret: params?.access_token_secret,
+      refresh_token: params?.refresh_token,
+      token_expires_at: params?.token_expires_at,
     };
 
     try {

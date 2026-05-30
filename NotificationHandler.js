@@ -1,10 +1,9 @@
 {/* <NotificationHandler /> app.js call */ }
 
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import messaging from '@react-native-firebase/messaging';
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { navigate, navigationRef } from './src/services/NavigationService';
 import { Routes } from './src/utils/Routes';
 
@@ -37,7 +36,6 @@ const NotificationHandler = () => {
           console.log('✅ Notification permission granted');
 
           const fcmToken = await messaging().getToken();
-          await AsyncStorage.setItem('fcmToken', fcmToken || '');
           console.log('📲 FCM Token:', fcmToken);
         }
       } catch (error) {

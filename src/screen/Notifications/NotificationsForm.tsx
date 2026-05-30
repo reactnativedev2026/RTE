@@ -20,10 +20,7 @@ interface EmailToggleState {
 }
 
 interface PushToggleState {
-  behind_pace?: boolean;
-  ahead_of_pace?: boolean;
-  goal_completed?: boolean;
-  monthly_reminder?: boolean;
+  monthly_goal?: boolean;
 }
 
 interface NotificationsFormProps {
@@ -37,28 +34,6 @@ interface NotificationsFormProps {
   loadingPushToggle?: Partial<PushToggleState>;
 }
 
-const PUSH_ITEMS: {key: keyof PushToggleState; title: string; description: string}[] = [
-  {
-    key: 'behind_pace',
-    title: 'Behind pace',
-    description: "Alert when you're falling behind your monthly mileage goal",
-  },
-  {
-    key: 'ahead_of_pace',
-    title: 'Ahead of pace',
-    description: "Celebrate when you're ahead of your monthly goal",
-  },
-  {
-    key: 'goal_completed',
-    title: 'Goal completed',
-    description: 'Celebrate when you hit 100% of your monthly goal',
-  },
-  {
-    key: 'monthly_reminder',
-    title: 'Monthly reminder',
-    description: 'First-of-month nudge to set or review your monthly goal',
-  },
-];
 
 const NotificationsForm = ({
   toggles,
@@ -150,35 +125,19 @@ const NotificationsForm = ({
 
       <CustomHorizontalLine />
 
-      {/* ── Monthly Goal Push Notifications ── */}
-      <Text style={styles.sectionTitle}>{'Monthly goal push notifications'}</Text>
-      <Text style={styles.sectionSubtitle}>
-        {'Choose which notifications you receive about your monthly activity goals'}
-      </Text>
-
-      {PUSH_ITEMS.map((item, index) => (
-        <View key={item.key}>
-          <View style={styles.notifRow}>
-            <View style={styles.notifTextContainer}>
-              <Text style={styles.notifTitle}>{item.title}</Text>
-              <Text style={styles.notifDescription}>{item.description}</Text>
-            </View>
-            <CustomToggleSwitch
-              offColor="grey"
-              isOn={pushToggles?.[item.key]}
-              loading={isPushLoading || loadingPushToggle?.[item.key]}
-              onToggle={() =>
-                onPushToggle?.(item.key, !pushToggles?.[item.key])
-              }
-              onColor={toggleColor}
-              toggleStyle={styles.toggle}
-            />
-          </View>
-          {index < PUSH_ITEMS.length - 1 && (
-            <CustomHorizontalLine customStyle={styles.rowDivider} />
-          )}
-        </View>
-      ))}
+      {/* ── Mobile Notifications ── */}
+      <Text style={styles.heading}>{'Mobile Notifications'}</Text>
+      <CustomToggleSwitch
+        offColor="grey"
+        label="Monthly Goal"
+        labelStyle={styles.label}
+        isOn={pushToggles?.monthly_goal}
+        loading={isPushLoading || loadingPushToggle?.monthly_goal}
+        onToggle={() =>
+          onPushToggle?.('monthly_goal', !pushToggles?.monthly_goal)
+        }
+        onColor={toggleColor}
+      />
     </View>
   );
 };
@@ -190,6 +149,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.white,
     paddingTop: moderateScale(20),
+    paddingBottom: moderateScale(20),
     marginHorizontal: moderateScale(10),
     borderRadius: moderateScale(25),
     paddingHorizontal: moderateScale(25),
@@ -213,47 +173,5 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(14),
     fontWeight: '700',
     color: colors.primaryGrey,
-  },
-  sectionTitle: {
-    fontSize: moderateScale(14),
-    fontWeight: '700',
-    color: colors.headerBlack,
-    marginTop: moderateScale(20),
-    marginBottom: moderateScale(4),
-  },
-  sectionSubtitle: {
-    fontSize: moderateScale(12),
-    fontWeight: '400',
-    color: colors.primaryGrey,
-    marginBottom: moderateScale(8),
-  },
-  notifRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: moderateScale(12),
-  },
-  notifTextContainer: {
-    flex: 1,
-    paddingRight: moderateScale(12),
-  },
-  notifTitle: {
-    fontSize: moderateScale(13),
-    fontWeight: '700',
-    color: colors.headerBlack,
-    marginBottom: moderateScale(2),
-  },
-  notifDescription: {
-    fontSize: moderateScale(11),
-    fontWeight: '400',
-    color: colors.primaryGrey,
-    lineHeight: moderateScale(16),
-  },
-  rowDivider: {
-    marginTop: 0,
-  },
-  toggle: {
-    height: moderateScale(23),
-    marginRight: moderateScale(5),
   },
 });

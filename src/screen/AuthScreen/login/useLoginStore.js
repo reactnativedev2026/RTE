@@ -1,7 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import DeviceInfo from 'react-native-device-info';
 import { Platform } from 'react-native';
+import messaging from '@react-native-firebase/messaging';
 import { store } from '../../../core/store';
 import { deviceTokenApi } from '../../../services/deviceToken.api';
 import { Routes } from '../../../utils/Routes';
@@ -45,7 +45,7 @@ const useLoginStore = create(set => ({
 
       // Store FCM device token in the backend
       try {
-        const fcmToken = await AsyncStorage.getItem('fcmToken');
+        const fcmToken = await messaging().getToken();
         if (fcmToken) {
           const devicePayload = {
             token: fcmToken,
@@ -59,7 +59,6 @@ const useLoginStore = create(set => ({
               deviceTokenApi.endpoints.saveDeviceToken.initiate(devicePayload),
             )
             .unwrap();
-          console.log('📲 Device token saved to backend');
         }
       } catch (err) {
         console.log('saveDeviceToken error:', err?.data?.message || err);

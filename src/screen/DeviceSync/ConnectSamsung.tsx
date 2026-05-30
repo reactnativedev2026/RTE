@@ -281,11 +281,11 @@ const ConnectSamsung = ({}: ConnectSamsungProps) => {
       <CustomHorizontalLine />
       <CustomModal
         visible={showSuccessModal}
-        title={'You\'re connected!'}
+        title={'Device Connected!'}
         description={
           syncCompleted
-            ? 'Successfully connected your Samsung Health to the RTE Tracker. Initial sync completed successfully.'
-            : 'Successfully connected your Samsung Health to the RTE Tracker. Initial sync is in progress.'
+            ? 'Your Samsung Health device is connected and all your data has been synced successfully.'
+            : 'Your Samsung Health device is connected. Your data is being synced in the background - this may take a few minutes depending on your selected date range.'
         }
         descriptionStyle={styles.description}
         showDescription={true}

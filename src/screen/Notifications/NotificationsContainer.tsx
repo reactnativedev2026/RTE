@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import messaging from '@react-native-firebase/messaging';
 import React, {useEffect, useRef} from 'react';
 import {Platform} from 'react-native';
 import DeviceInfo from 'react-native-device-info';
@@ -15,16 +15,7 @@ import NotificationsForm from './NotificationsForm';
 
 interface NotificationsContainerProps {}
 
-const UI_TO_API_KEY: Record<string, string> = {
-  behind_pace: 'monthly_behind_push',
-  ahead_of_pace: 'monthly_ahead_push',
-  goal_completed: 'monthly_completed_push',
-  monthly_reminder: 'monthly_reminder_push',
-};
-
-const API_TO_UI_KEY: Record<string, string> = Object.fromEntries(
-  Object.entries(UI_TO_API_KEY).map(([ui, api]) => [api, ui]),
-);
+const ALL_PUSH_API_KEYS = ['monthly_completed_push'];
 
 const defaultEmailToggles = {
   bibs: false,
@@ -35,10 +26,7 @@ const defaultEmailToggles = {
 };
 
 const defaultPushToggles = {
-  behind_pace: false,
-  ahead_of_pace: false,
-  goal_completed: false,
-  monthly_reminder: false,
+  monthly_goal: false,
 };
 
 const NotificationsContainer = ({}: NotificationsContainerProps) => {
@@ -98,16 +86,8 @@ const NotificationsContainer = ({}: NotificationsContainerProps) => {
       .unwrap()
       .then(res => {
         const prefs = res?.data?.notification_preferences ?? {};
-        const uiToggles = Object.entries(prefs).reduce<
-          Partial<typeof defaultPushToggles>
-        >((acc, [apiKey, val]) => {
-          const uiKey = API_TO_UI_KEY[apiKey];
-          if (uiKey) {
-            (acc as any)[uiKey] = val;
-          }
-          return acc;
-        }, {});
-        setPushToggles({...defaultPushToggles, ...uiToggles});
+        const anyEnabled = ALL_PUSH_API_KEYS.some(k => (prefs as any)[k]);
+        setPushToggles({monthly_goal: anyEnabled});
       })
       .catch(err => {
         CustomAlert({type: 'error', message: err?.data?.message});
@@ -115,21 +95,21 @@ const NotificationsContainer = ({}: NotificationsContainerProps) => {
   };
 
   const handlePushToggle = (uiKey: string, value: boolean) => {
-    const updatedToggles = {...pushTogglesRef.current, [uiKey]: value};
-    setPushToggles(updatedToggles);
+    setPushToggles({monthly_goal: value});
     setLoadingPushToggles(prev => ({...prev, [uiKey]: true}));
 
-    const preferences = Object.entries(UI_TO_API_KEY).reduce<
-      Record<string, boolean>
-    >((acc, [k, apiKey]) => {
-      acc[apiKey] = (updatedToggles as any)[k] ?? false;
-      return acc;
-    }, {});
+    const preferences = ALL_PUSH_API_KEYS.reduce<Record<string, boolean>>(
+      (acc, apiKey) => {
+        acc[apiKey] = value;
+        return acc;
+      },
+      {},
+    );
 
     updatePreferences({preferences})
       .unwrap()
       .catch(err => {
-        setPushToggles(pushTogglesRef.current);
+        setPushToggles({...pushTogglesRef.current});
         CustomAlert({type: 'error', message: err?.data?.message});
       })
       .finally(() => {
@@ -140,7 +120,7 @@ const NotificationsContainer = ({}: NotificationsContainerProps) => {
   // ── Device token sync ─────────────────────────────────────────────────────
   const syncDeviceToken = async () => {
     try {
-      const fcmToken = await AsyncStorage.getItem('fcmToken');
+      const fcmToken = await messaging().getToken();
       if (!fcmToken) {
         return;
       }

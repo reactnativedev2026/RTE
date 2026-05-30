@@ -3,7 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState, store } from '../core/store';
 import useCustomHomeWrapper from '../hooks/useCustomHomeWrapper';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import messaging from '@react-native-firebase/messaging';
 import { setResetLogin } from '../screen/AuthScreen/login/login.slice';
 import { deviceTokenApi } from '../services/deviceToken.api';
 import { appUrls } from '../screen/Setting/helper';
@@ -40,14 +40,13 @@ const CustomSettingMain = ({}: CustomSettingMainProps) => {
   );
   const Logout = async () => {
     try {
-      const fcmToken = await AsyncStorage.getItem('fcmToken');
+      const fcmToken = await messaging().getToken();
       if (fcmToken) {
         await store
           .dispatch(
             deviceTokenApi.endpoints.deactivateDeviceToken.initiate(fcmToken),
           )
           .unwrap();
-        console.log('🗑️ Device token deactivated on backend');
       }
     } catch (err) {
       console.log('deactivateDeviceToken error:', err?.data?.message || err);
